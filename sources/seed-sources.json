@@ -1,0 +1,938 @@
+[
+  {
+    "section": "cosmos",
+    "name": "NASA Breaking News",
+    "type": "rss",
+    "url": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
+    "country": "US",
+    "trustScore": 92,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "JPL News",
+    "type": "rss",
+    "url": "https://www.jpl.nasa.gov/feed/",
+    "country": "US",
+    "trustScore": 90,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "NASA Earth Observatory",
+    "type": "rss",
+    "url": "https://earthobservatory.nasa.gov/feeds/rss.xml",
+    "country": "US",
+    "trustScore": 90,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "NASA Science",
+    "type": "rss",
+    "url": "https://science.nasa.gov/feed/",
+    "country": "US",
+    "trustScore": 90,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "ESA Top News",
+    "type": "rss",
+    "url": "https://www.esa.int/rssfeed/TopNews",
+    "country": "EU",
+    "trustScore": 88,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "NASA Mars Exploration",
+    "type": "rss",
+    "url": "https://mars.nasa.gov/rss/blogs/",
+    "country": "US",
+    "trustScore": 88,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "ESA Science & Exploration",
+    "type": "rss",
+    "url": "https://www.esa.int/rssfeed/Our_Activities/Space_Science",
+    "country": "EU",
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "HubbleSite",
+    "type": "rss",
+    "url": "https://hubblesite.org/feed/news",
+    "country": "US",
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "arXiv astro-ph",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/astro-ph",
+    "country": null,
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "arXiv physics.space-ph",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/physics.space-ph",
+    "country": null,
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "Chandra X-ray Observatory",
+    "type": "rss",
+    "url": "https://chandra.harvard.edu/rss/index.html",
+    "country": "US",
+    "trustScore": 84,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "arXiv hep-ph",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/hep-ph",
+    "country": null,
+    "trustScore": 83,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "arXiv quant-ph",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/quant-ph",
+    "country": null,
+    "trustScore": 83,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "SETI Institute",
+    "type": "rss",
+    "url": "https://www.seti.org/rss.xml",
+    "country": "US",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "Sky & Telescope",
+    "type": "rss",
+    "url": "https://skyandtelescope.org/feed/",
+    "country": "US",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "Space.com",
+    "type": "rss",
+    "url": "https://www.space.com/feeds/all",
+    "country": "US",
+    "trustScore": 78,
+    "enabled": true
+  },
+  {
+    "section": "cosmos",
+    "name": "Universe Today",
+    "type": "rss",
+    "url": "https://www.universetoday.com/feed/",
+    "country": "US",
+    "trustScore": 75,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "GitHub Blog",
+    "type": "rss",
+    "url": "https://github.blog/feed/",
+    "country": "US",
+    "trustScore": 88,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "MIT OpenCourseWare News",
+    "type": "rss",
+    "url": "https://ocw.mit.edu/rss/new_courses.xml",
+    "country": "US",
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "Python Insider",
+    "type": "rss",
+    "url": "https://blog.python.org/feeds/posts/default",
+    "country": "US",
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "Martin Fowler",
+    "type": "rss",
+    "url": "https://martinfowler.com/feed.atom",
+    "country": "US",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "OpenSource.com",
+    "type": "rss",
+    "url": "https://opensource.com/feed",
+    "country": "US",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "Kubernetes Blog",
+    "type": "rss",
+    "url": "https://kubernetes.io/feed.xml",
+    "country": "US",
+    "trustScore": 84,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "Rust Blog",
+    "type": "rss",
+    "url": "https://blog.rust-lang.org/feed.xml",
+    "country": "US",
+    "trustScore": 84,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "CNCF Blog",
+    "type": "rss",
+    "url": "https://www.cncf.io/blog/feed/",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "Cloudflare Blog",
+    "type": "rss",
+    "url": "https://blog.cloudflare.com/rss/",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "Hacker News",
+    "type": "rss",
+    "url": "https://news.ycombinator.com/rss",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "Stripe Blog",
+    "type": "rss",
+    "url": "https://stripe.com/blog/feed.rss",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "FSF News",
+    "type": "rss",
+    "url": "https://www.fsf.org/news/rss",
+    "country": "US",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "DEV.to",
+    "type": "rss",
+    "url": "https://dev.to/feed",
+    "country": "US",
+    "trustScore": 78,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "History Today",
+    "type": "rss",
+    "url": "https://www.historytoday.com/feed/rss.xml",
+    "country": "GB",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "British Museum",
+    "type": "rss",
+    "url": "https://blog.britishmuseum.org/feed/",
+    "country": "GB",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Library of Congress",
+    "type": "rss",
+    "url": "https://blogs.loc.gov/feed/",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Smithsonian History",
+    "type": "rss",
+    "url": "https://www.smithsonianmag.com/history/feed/",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "The Conversation History UK",
+    "type": "rss",
+    "url": "https://theconversation.com/uk/history/feed",
+    "country": "GB",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Met Museum",
+    "type": "rss",
+    "url": "https://www.metmuseum.org/rss/articles",
+    "country": "US",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Khan Academy - World History",
+    "type": "rss",
+    "url": "https://blog.khanacademy.org/category/world-history/feed/",
+    "country": "US",
+    "trustScore": 75,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Yaqeen Institute",
+    "type": "rss",
+    "url": "https://yaqeeninstitute.org/feed",
+    "country": "US",
+    "trustScore": 72,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "MuslimMatters",
+    "type": "rss",
+    "url": "https://muslimmatters.org/feed/",
+    "country": "US",
+    "trustScore": 70,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "MIT Robotics + AI",
+    "type": "rss",
+    "url": "https://news.mit.edu/topic/robotics-ai/feed",
+    "country": "US",
+    "trustScore": 92,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "IEEE Spectrum Robotics",
+    "type": "rss",
+    "url": "https://spectrum.ieee.org/rss/robotics",
+    "country": "US",
+    "trustScore": 90,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "MIT News - Artificial Intelligence",
+    "type": "rss",
+    "url": "https://news.mit.edu/topic/artificial-intelligence2/feed",
+    "country": "US",
+    "trustScore": 90,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "MIT News - Engineering",
+    "type": "rss",
+    "url": "https://news.mit.edu/topic/engineering/feed",
+    "country": "US",
+    "trustScore": 90,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "DARPA",
+    "type": "rss",
+    "url": "https://www.darpa.mil/rss",
+    "country": "US",
+    "trustScore": 88,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "ArXiv Robotics (cs.RO)",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/cs.RO",
+    "country": null,
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "Stanford AI Lab",
+    "type": "rss",
+    "url": "https://ai.stanford.edu/blog/feed.xml",
+    "country": "US",
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "Ars Technica",
+    "type": "rss",
+    "url": "http://feeds.arstechnica.com/arstechnica/index",
+    "country": "US",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "AWS Machine Learning",
+    "type": "rss",
+    "url": "https://aws.amazon.com/blogs/machine-learning/feed/",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "Boston Dynamics",
+    "type": "rss",
+    "url": "https://www.bostondynamics.com/feed",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "Google AI Blog",
+    "type": "rss",
+    "url": "https://blog.google/technology/ai/rss/",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "Microsoft Research",
+    "type": "rss",
+    "url": "https://www.microsoft.com/en-us/research/feed/",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "NVIDIA Blog",
+    "type": "rss",
+    "url": "https://blogs.nvidia.com/blog/feed/",
+    "country": "US",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "Wired",
+    "type": "rss",
+    "url": "https://www.wired.com/feed/rss",
+    "country": "US",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "Robohub",
+    "type": "rss",
+    "url": "https://robohub.org/feed/",
+    "country": "US",
+    "trustScore": 78,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "TechCrunch",
+    "type": "rss",
+    "url": "https://techcrunch.com/feed/",
+    "country": "US",
+    "trustScore": 76,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "Robot Report",
+    "type": "rss",
+    "url": "https://www.therobotreport.com/feed/",
+    "country": "US",
+    "trustScore": 75,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "AP International",
+    "type": "rss",
+    "url": "https://rss.apnews.com/apf-intlnews",
+    "country": "US",
+    "trustScore": 90,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "UN News",
+    "type": "rss",
+    "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml",
+    "country": "UN",
+    "trustScore": 88,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "BBC Top",
+    "type": "rss",
+    "url": "https://feeds.bbci.co.uk/news/rss.xml",
+    "country": "GB",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "BBC World",
+    "type": "rss",
+    "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "country": "GB",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "Our World in Data",
+    "type": "rss",
+    "url": "https://ourworldindata.org/feeds/latest.xml",
+    "country": "GB",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "WHO News",
+    "type": "rss",
+    "url": "https://www.who.int/rss-feeds/news-english.xml",
+    "country": "CH",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "The Guardian World",
+    "type": "rss",
+    "url": "https://www.theguardian.com/world/rss",
+    "country": "GB",
+    "trustScore": 84,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "DW Top",
+    "type": "rss",
+    "url": "https://rss.dw.com/rdf/en/top-stories",
+    "country": "DE",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "NPR World",
+    "type": "rss",
+    "url": "https://feeds.npr.org/1004/rss.xml",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "ReliefWeb Updates",
+    "type": "rss",
+    "url": "https://reliefweb.int/updates/rss.xml",
+    "country": "UN",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "Al Jazeera All",
+    "type": "rss",
+    "url": "https://www.aljazeera.com/xml/rss/all.xml",
+    "country": "QA",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "France24",
+    "type": "rss",
+    "url": "https://www.france24.com/en/rss",
+    "country": "FR",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "PBS World",
+    "type": "rss",
+    "url": "https://www.pbs.org/newshour/feeds/rss/world",
+    "country": "US",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "The Hindu International",
+    "type": "rss",
+    "url": "https://www.thehindu.com/news/international/feeder/default.rss",
+    "country": "IN",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "World Bank News",
+    "type": "rss",
+    "url": "https://www.worldbank.org/en/news/all?format=rss",
+    "country": "US",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "ABC News (AU)",
+    "type": "rss",
+    "url": "https://www.abc.net.au/news/feed/51120/rss.xml",
+    "country": "AU",
+    "trustScore": 78,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "CBC World",
+    "type": "rss",
+    "url": "https://www.cbc.ca/cmlink/rss-world",
+    "country": "CA",
+    "trustScore": 78,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "IMF News",
+    "type": "rss",
+    "url": "https://www.imf.org/en/News/RSS",
+    "country": "US",
+    "trustScore": 78,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "The Conversation (Global)",
+    "type": "rss",
+    "url": "https://theconversation.com/global/feed",
+    "country": "INT",
+    "trustScore": 78,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "Dawn (PK)",
+    "type": "rss",
+    "url": "https://www.dawn.com/feeds/home",
+    "country": "PK",
+    "trustScore": 76,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "Japan Times",
+    "type": "rss",
+    "url": "https://www.japantimes.co.jp/feed/",
+    "country": "JP",
+    "trustScore": 75,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "RTÉ News",
+    "type": "rss",
+    "url": "https://www.rte.ie/feeds/rss/?index=/news/",
+    "country": "IE",
+    "trustScore": 74,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "Swissinfo",
+    "type": "rss",
+    "url": "https://www.swissinfo.ch/eng/rss",
+    "country": "CH",
+    "trustScore": 74,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "The Daily Star (BD)",
+    "type": "rss",
+    "url": "https://www.thedailystar.net/rss.xml",
+    "country": "BD",
+    "trustScore": 74,
+    "enabled": true
+  },
+  {
+    "section": "news",
+    "name": "Prothom Alo (EN)",
+    "type": "rss",
+    "url": "https://en.prothomalo.com/feed",
+    "country": "BD",
+    "trustScore": 72,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "CISA Alerts",
+    "type": "rss",
+    "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+    "country": "US",
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "NIST News",
+    "type": "rss",
+    "url": "https://www.nist.gov/news-events/news/rss.xml",
+    "country": "US",
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "arXiv cs.AI",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/cs.AI",
+    "country": null,
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "arXiv cs.CL",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/cs.CL",
+    "country": null,
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "arXiv cs.CV",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/cs.CV",
+    "country": null,
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "arXiv cs.LG",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/cs.LG",
+    "country": null,
+    "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "USPTO News",
+    "type": "rss",
+    "url": "https://www.uspto.gov/rss.xml",
+    "country": "US",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "arXiv cs.SE",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/cs.SE",
+    "country": null,
+    "trustScore": 84,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "US SEC Press Releases",
+    "type": "rss",
+    "url": "https://www.sec.gov/rss/press.xml",
+    "country": "US",
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "arXiv econ.EM",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/econ.EM",
+    "country": null,
+    "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "WIPO News",
+    "type": "rss",
+    "url": "https://www.wipo.int/pressroom/en/rss.xml",
+    "country": "CH",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "EUIPO News",
+    "type": "rss",
+    "url": "https://euipo.europa.eu/ohimportal/en/rss?rss=press-releases",
+    "country": "EU",
+    "trustScore": 78,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "Patently-O",
+    "type": "rss",
+    "url": "https://patentlyo.com/feed",
+    "country": "US",
+    "trustScore": 78,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "arXiv EESS.SY",
+    "url": "https://rss.arxiv.org/rss/eess.SY",
+    "type": "rss",
+    "country": "INTL",
+    "trustScore": 70,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "CISA Alerts",
+    "url": "https://www.cisa.gov/cybersecurity-advisories/alerts.xml",
+    "type": "rss",
+    "country": "US",
+    "trustScore": 90,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "IEEE Spectrum",
+    "url": "https://spectrum.ieee.org/feed",
+    "type": "rss",
+    "country": "INTL",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "CERN News",
+    "url": "https://home.cern/news/rss",
+    "type": "rss",
+    "country": "INTL",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "signals",
+    "name": "ESA News",
+    "url": "https://www.esa.int/rssfeed/Our_Activities",
+    "type": "rss",
+    "country": "INTL",
+    "trustScore": 90,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Harvard Islamic Studies (OS RSS)",
+    "url": "https://islamicstudies.harvard.edu/rss.xml?term=175863",
+    "type": "rss",
+    "country": "US",
+    "trustScore": 85,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "The Muslim History Channel",
+    "url": "https://media.rss.com/themuslimhistorychannel/feed.xml",
+    "type": "rss",
+    "country": "INTL",
+    "trustScore": 60,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Qatar Digital Library - Articles",
+    "url": "https://www.qdl.qa/en/rss.xml",
+    "type": "rss",
+    "country": "QA",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "British Library - Asian and African Studies",
+    "url": "https://blogs.bl.uk/asian-and-african/rss.xml",
+    "type": "rss",
+    "country": "UK",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Met Museum - The Met",
+    "url": "https://www.metmuseum.org/blogs/rss",
+    "type": "rss",
+    "country": "US",
+    "trustScore": 80,
+    "enabled": true
+  }
+]

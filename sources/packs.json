@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "providers": [
+    {
+      "id": "plenary-awesome-rss-feeds",
+      "enabled": true,
+      "type": "github_opml_directory",
+      "repo": "spians/awesome-RSS-feeds",
+      "branch": "master",
+      "directories": [
+        { "path": "countries/without_category", "defaultSection": "news" },
+        { "path": "recommended/without_category", "defaultSection": "creators" }
+      ]
+    }
+  ],
+  "extraOpml": []
+}

@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/ingest?token=YOUR_ADMIN_TOKEN",
+      "schedule": "*/30 * * * *"
+    }
+  ]
+}

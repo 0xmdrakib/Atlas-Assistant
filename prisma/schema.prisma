@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // IMPORTANT (Supabase / PgBouncer): use a DIRECT_URL for schema operations.
+  // Runtime queries can use pooled DATABASE_URL.
+  directUrl = env("DIRECT_URL")
+}
+
+model Source {
+  id         String   @id @default(cuid())
+  section    String
+  name       String
+  type       String
+  url        String   @unique
+  country    String?
+  trustScore Int      @default(60)
+  enabled    Boolean  @default(true)
+  lastFetchedAt DateTime?
+  lastOkAt      DateTime?
+  consecutiveFails Int @default(0)
+  createdAt  DateTime @default(now())
+  items      Item[]
+}
+
+model Item {
+  id          String   @id @default(cuid())
+  sourceId    String
+  source      Source   @relation(fields: [sourceId], references: [id])
+  section     String
+  title       String
+  summary     String
+  aiSummary   String?
+  url         String   @unique
+  country     String?
+  topics      String[]
+  score       Float    @default(0)
+  publishedAt DateTime
+  createdAt   DateTime @default(now())
+
+  // Cached per-language text for non-English mode (login-gated)
+  translations ItemTranslation[]
+
+  @@index([section, publishedAt])
+  @@index([section, score, publishedAt])
+}
+
+model IngestRun {
+  id          String   @id @default(cuid())
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  ok          Boolean  @default(false)
+  added       Int      @default(0)
+  skipped     Int      @default(0)
+  message     String?
+}
+
+model Digest {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique
+  section   String
+  days      Int
+  country   String?
+  topic     String?
+  summary   String
+  createdAt DateTime @default(now())
+
+  @@index([section, days])
+  @@index([section, days, country, topic])
+}
+
+// --- AI Usage Limits ---
+// Tracks per-user daily usage for paid features.
+model AiUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  day       String   // YYYY-MM-DD (UTC)
+
+  // Only these count toward the daily limit.
+  digestCount  Int   @default(0)
+  summaryCount Int   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([day])
+}
+
+// --- Cached translations for non-English UI mode ---
+// Translation is login-gated (to prevent abuse) and is NOT counted in AI quota.
+model ItemTranslation {
+  id        String   @id @default(cuid())
+  itemId    String
+  lang      String   // BCP-47 like "bn" / "ar" / "fr"
+  title     String
+  summary   String
+  aiSummary String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, lang])
+  @@index([lang])
+}
+
+// --- Auth (NextAuth + Prisma Adapter) ---
+// These tables let us store users/sessions and protect AI features behind Google login.
+// Schema based on the Prisma adapter's standard models.
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  // Daily AI usage counters (quota)
+  aiUsages      AiUsage[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}

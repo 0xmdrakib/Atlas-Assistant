@@ -1,0 +1,70 @@
+"use client";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Sparkles, ShieldCheck, Telescope, Cpu, Radar, Users, BookOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { AuthButton } from "@/components/auth-button";
+import { SettingsMenu } from "@/components/settings-menu";
+import { useLanguage } from "@/components/language-provider";
+
+const tabs = [
+  { href: "/news", labelKey: "tabNews" as const, icon: ShieldCheck },
+  { href: "/cosmos", labelKey: "tabCosmos" as const, icon: Telescope },
+  { href: "/innovators", labelKey: "tabInnovators" as const, icon: Cpu },
+  { href: "/signals", labelKey: "tabSignals" as const, icon: Radar },
+  { href: "/creators", labelKey: "tabCreators" as const, icon: Users },
+  { href: "/history", labelKey: "tabHistory" as const, icon: BookOpen },
+];
+
+export function TabShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const sp = useSearchParams();
+  const qs = sp.toString();
+  const { lang, t } = useLanguage();
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-10">
+      <header className="mb-7 flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            <Sparkles size={18} className="text-[hsl(var(--accent))]" />
+            {t(lang, "atlasAssistant")}
+          </div>
+          <div className="mt-1 text-sm text-muted">{t(lang, "tagline")}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <AuthButton />
+          <SettingsMenu />
+        </div>
+      </header>
+
+      <nav className="mb-6 flex flex-wrap gap-2">
+        {tabs.map((tab) => {
+          const active = pathname === tab.href;
+          const Icon = tab.icon;
+          return (
+            <Link
+              key={tab.href}
+              href={qs ? `${tab.href}?${qs}` : tab.href}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-ring",
+                active
+                  ? "border-[hsl(var(--accent)/.35)] bg-black/25 text-[hsl(var(--fg))]"
+                  : "border-soft text-muted hover:bg-white/5"
+              )}
+            >
+              <Icon size={16} />
+              {t(lang, tab.labelKey)}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {children}
+
+      <footer className="mt-10 text-xs text-muted">
+        Stored: 30 days rolling (History longer) • Cron: <span className="text-[hsl(var(--accent))]">/api/cron/ingest</span>
+      </footer>
+    </div>
+  );
+}
