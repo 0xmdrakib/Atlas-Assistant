@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Atlas theme: dark basalt + creamy whites + warm gold accent.
+  Goal: "pro" contrast + calm texture (subtle dots + noise).
+*/
+:root {
+  --bg: 220 35% 5%;
+  --bg2: 223 28% 8%;
+  --surface: 222 22% 12%;
+
+  --fg: 38 35% 96%;
+  --muted-fg: 38 14% 76%;
+
+  --border: 220 18% 22%;
+  --ring: 42 45% 80%;
+  --accent: 42 70% 62%;
+  --danger: 0 72% 62%;
+}
+
+.dark {
+  --bg: 220 35% 5%;
+  --bg2: 223 28% 8%;
+  --surface: 222 22% 12%;
+
+  --fg: 38 35% 96%;
+  --muted-fg: 38 14% 76%;
+
+  --border: 220 18% 22%;
+  --ring: 42 45% 80%;
+  --accent: 42 70% 62%;
+  --danger: 0 72% 62%;
+}
+
+body {
+  background:
+    /* Use Color 4 slash-alpha syntax so custom properties work everywhere */
+    radial-gradient(1100px 900px at 18% 10%, hsl(var(--accent) / 0.12), transparent 56%),
+    radial-gradient(900px 700px at 82% 14%, hsla(199, 70%, 55%, 0.06), transparent 60%),
+    linear-gradient(to bottom, hsl(var(--bg)), hsl(var(--bg2)));
+  color: hsl(var(--fg));
+  letter-spacing: -0.01em;
+  text-rendering: geometricPrecision;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* grid texture */
+  background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.045) 1px, transparent 0);
+  background-size: 24px 24px;
+  opacity: 0.16;
+  mix-blend-mode: soft-light;
+}
+
+body::after {
+  /* soft noise texture */
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+}
+
+.bg-surface { background: linear-gradient(180deg, hsl(var(--surface) / 0.82), hsl(var(--bg2) / 0.70)); }
+.text-muted { color: hsl(var(--muted-fg)); }
+.border-soft { border-color: rgba(255,255,255,0.08); }
+.focus-ring:focus { outline: none; box-shadow: 0 0 0 3px hsl(var(--ring) / .25); }
