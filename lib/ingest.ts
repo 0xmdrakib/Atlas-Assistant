@@ -117,6 +117,15 @@ export async function ingestOnce() {
   const perSection = Math.max(8, Math.floor(maxSourcesTotal / Math.max(1, sections.length)));
 
   // Retention + cap counts (section-level, once).
+  // IMPORTANT WINDOW ALIGNMENT
+  // The UI window filter (/api/items) uses:
+  // - publishedAt for most sections
+  // - createdAt for History (because publishedAt can be centuries old)
+  //
+  // If we cap/retain by createdAt everywhere, a single ingest run can quickly hit
+  // daily/weekly caps (based on "insert time"), after which subsequent cron runs
+  // add nothing and the feed appears "stuck". To keep ingest behavior consistent
+  // with what the UI shows, we apply caps/retention by publishedAt for non-History.
   const now = Date.now();
   const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
   const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
@@ -126,13 +135,24 @@ export async function ingestOnce() {
   for (const sec of sections) {
     const policy = SECTION_POLICIES[sec];
     const retention = new Date(now - policy.retentionDays * 24 * 60 * 60 * 1000);
-    await prisma.item.deleteMany({ where: { section: sec, createdAt: { lt: retention } } });
+
+    // History: curated old knowledge, window/caps are based on "when we added it".
+    // All other sections: window/caps are based on publishedAt.
+    const timeField = sec === "history" ? "createdAt" : "publishedAt";
+
+    await prisma.item.deleteMany({ where: { section: sec, [timeField]: { lt: retention } } as any });
     const [d, w, m] = await Promise.all([
-      prisma.item.count({ where: { section: sec, createdAt: { gte: dayAgo } } }),
-      prisma.item.count({ where: { section: sec, createdAt: { gte: weekAgo } } }),
-      prisma.item.count({ where: { section: sec, createdAt: { gte: monthAgo } } }),
+      prisma.item.count({ where: { section: sec, [timeField]: { gte: dayAgo } } as any }),
+      prisma.item.count({ where: { section: sec, [timeField]: { gte: weekAgo } } as any }),
+      prisma.item.count({ where: { section: sec, [timeField]: { gte: monthAgo } } as any }),
     ]);
     state[sec] = { dayCount: d, weekCount: w, monthCount: m };
+  }
+
+  function bumpWindowCounts(section: string, effectiveTime: Date) {
+    if (effectiveTime >= dayAgo) state[section].dayCount += 1;
+    if (effectiveTime >= weekAgo) state[section].weekCount += 1;
+    if (effectiveTime >= monthAgo) state[section].monthCount += 1;
   }
 
   // Choose a rotating subset of sources so 1000+ sources stays fast.
@@ -275,9 +295,8 @@ export async function ingestOnce() {
           },
         });
         added += 1;
-        state[s.section].dayCount += 1;
-        state[s.section].weekCount += 1;
-        state[s.section].monthCount += 1;
+        const effectiveTime = s.section === "history" ? new Date() : c.publishedAt;
+        bumpWindowCounts(s.section, effectiveTime);
       } catch {
         skipped += 1;
       }
@@ -329,9 +348,8 @@ export async function ingestOnce() {
           },
         });
         added += 1;
-        state[sec].dayCount += 1;
-        state[sec].weekCount += 1;
-        state[sec].monthCount += 1;
+        const effectiveTime = sec === "history" ? new Date() : g.publishedAt;
+        bumpWindowCounts(sec, effectiveTime);
       } catch {
         skipped += 1;
       }
@@ -402,9 +420,8 @@ export async function ingestOnce() {
             },
           });
           added += 1;
-          state[sec].dayCount += 1;
-          state[sec].weekCount += 1;
-          state[sec].monthCount += 1;
+          const effectiveTime = sec === "history" ? new Date() : g.publishedAt;
+          bumpWindowCounts(sec, effectiveTime);
         } catch {
           skipped += 1;
         }
