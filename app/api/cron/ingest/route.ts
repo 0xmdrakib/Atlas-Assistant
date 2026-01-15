@@ -17,7 +17,9 @@ function receiverOrErrorResponse() {
   if (!currentSigningKey) missing.push("QSTASH_CURRENT_SIGNING_KEY");
   if (!nextSigningKey) missing.push("QSTASH_NEXT_SIGNING_KEY");
 
-  if (missing.length) {
+  // Explicit guard so TypeScript narrows keys to `string` below.
+  // (Even if env vars are set in Vercel, `process.env.*` is typed as `string | undefined`.)
+  if (!currentSigningKey || !nextSigningKey) {
     // Return a JSON body so QStash logs show the real reason instead of an empty 500.
     return {
       receiver: null as Receiver | null,
