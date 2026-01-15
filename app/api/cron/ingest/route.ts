@@ -1,10 +1,18 @@
 import { Receiver } from "@upstash/qstash";
 import { NextResponse } from "next/server";
+import { ingestOnce } from "@/lib/ingest";
 
-const receiver = new Receiver({
-  currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY!,
-  nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY!,
-});
+// Ensure the handler isn't accidentally cached.
+export const dynamic = "force-dynamic";
+
+function getReceiver() {
+  const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+  if (!currentSigningKey || !nextSigningKey) {
+    throw new Error("Missing QStash signing keys");
+  }
+  return new Receiver({ currentSigningKey, nextSigningKey });
+}
 
 export async function POST(req: Request) {
   const signature =
@@ -17,6 +25,8 @@ export async function POST(req: Request) {
   // IMPORTANT: verify needs the *raw* body string
   const body = await req.text();
 
+  const receiver = getReceiver();
+
   const isValid = await receiver.verify({
     signature,
     body,
@@ -27,7 +37,6 @@ export async function POST(req: Request) {
   }
 
   // ✅ Authorized by QStash: run ingest
-  // await runIngest();   <-- call your existing ingest logic
-
-  return NextResponse.json({ ok: true });
+  const result = await ingestOnce();
+  return NextResponse.json(result);
 }
