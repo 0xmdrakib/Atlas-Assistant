@@ -5,38 +5,122 @@ import { ingestOnce } from "@/lib/ingest";
 // Ensure the handler isn't accidentally cached.
 export const dynamic = "force-dynamic";
 
-function getReceiver() {
+function getSigningKeys() {
   const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
   const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
-  if (!currentSigningKey || !nextSigningKey) {
-    throw new Error("Missing QStash signing keys");
-  }
-  return new Receiver({ currentSigningKey, nextSigningKey });
+  return { currentSigningKey, nextSigningKey };
 }
 
+function receiverOrErrorResponse() {
+  const { currentSigningKey, nextSigningKey } = getSigningKeys();
+  const missing: string[] = [];
+  if (!currentSigningKey) missing.push("QSTASH_CURRENT_SIGNING_KEY");
+  if (!nextSigningKey) missing.push("QSTASH_NEXT_SIGNING_KEY");
+
+  if (missing.length) {
+    // Return a JSON body so QStash logs show the real reason instead of an empty 500.
+    return {
+      receiver: null as Receiver | null,
+      errorResponse: NextResponse.json(
+        {
+          ok: false,
+          error: "Missing QStash signing keys",
+          missing,
+        },
+        { status: 500 }
+      ),
+    };
+  }
+
+  return {
+    receiver: new Receiver({ currentSigningKey, nextSigningKey }),
+    errorResponse: null as NextResponse | null,
+  };
+}
+
+// QStash (scheduled) calls should use POST.
 export async function POST(req: Request) {
-  const signature =
-    req.headers.get("Upstash-Signature") ?? req.headers.get("upstash-signature");
+  try {
+    const signature =
+      req.headers.get("Upstash-Signature") ?? req.headers.get("upstash-signature");
 
-  if (!signature) {
-    return NextResponse.json({ error: "Missing Upstash-Signature" }, { status: 401 });
+    if (!signature) {
+      return NextResponse.json(
+        { ok: false, error: "Missing Upstash-Signature header" },
+        { status: 401 }
+      );
+    }
+
+    // Receiver.verify expects the *raw request body*.
+    const body = await req.text();
+
+    const { receiver, errorResponse } = receiverOrErrorResponse();
+    if (errorResponse) return errorResponse;
+
+    let isValid = false;
+    try {
+      isValid = await receiver!.verify({ signature, body });
+    } catch (e: any) {
+      console.error("QStash signature verification threw:", e);
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Signature verification error",
+          message: e?.message || String(e),
+        },
+        { status: 401 }
+      );
+    }
+
+    if (!isValid) {
+      return NextResponse.json(
+        { ok: false, error: "Invalid signature" },
+        { status: 401 }
+      );
+    }
+
+    const result = await ingestOnce();
+    return NextResponse.json(result);
+  } catch (e: any) {
+    console.error("/api/cron/ingest POST failed:", e);
+    return NextResponse.json(
+      { ok: false, error: "Ingest failed", message: e?.message || String(e) },
+      { status: 500 }
+    );
   }
+}
 
-  // IMPORTANT: verify needs the *raw* body string
-  const body = await req.text();
+// Manual trigger (your UI button / debugging). Keep this protected.
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const token = url.searchParams.get("token");
 
-  const receiver = getReceiver();
+    // In production, require ADMIN_TOKEN.
+    if (process.env.VERCEL_ENV === "production") {
+      if (!process.env.ADMIN_TOKEN) {
+        return NextResponse.json(
+          { ok: false, error: "ADMIN_TOKEN is not set" },
+          { status: 500 }
+        );
+      }
+      if (token !== process.env.ADMIN_TOKEN) {
+        return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      }
+    } else {
+      // In preview/dev, if ADMIN_TOKEN exists, enforce it; otherwise allow.
+      if (process.env.ADMIN_TOKEN && token !== process.env.ADMIN_TOKEN) {
+        return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      }
+    }
 
-  const isValid = await receiver.verify({
-    signature,
-    body,
-  });
-
-  if (!isValid) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    const result = await ingestOnce();
+    return NextResponse.json(result);
+  } catch (e: any) {
+    console.error("/api/cron/ingest GET failed:", e);
+    return NextResponse.json(
+      { ok: false, error: "Ingest failed", message: e?.message || String(e) },
+      { status: 500 }
+    );
   }
-
-  // ✅ Authorized by QStash: run ingest
-  const result = await ingestOnce();
-  return NextResponse.json(result);
 }
