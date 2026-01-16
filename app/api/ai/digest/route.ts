@@ -7,6 +7,8 @@ import { enforceAndIncrementAiUsage } from "@/lib/aiQuota";
 
 const ALLOWED_SECTIONS = new Set<Section>(["global","tech","innovators","early","creators","universe","history","faith"]);
 
+const DIGEST_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 function enabled() {
   return (
     String(process.env.AI_SUMMARY_ENABLED || "false").toLowerCase() === "true" &&
@@ -14,10 +16,19 @@ function enabled() {
   );
 }
 
+function normalizeDays(section: Section, daysRaw: number): number {
+  // Product rule:
+  // - All sections except History: only 1 or 7 days (default 1)
+  // - History: only 7 or 30 days (default 7)
+  if (section === "history") {
+    return daysRaw === 30 || daysRaw === 7 ? daysRaw : 7;
+  }
+  return daysRaw === 1 || daysRaw === 7 ? daysRaw : 1;
+}
+
 function digestCacheKey(section: string, days: number, country: string | null, topic: string | null, lang: string) {
-  // 30 min buckets so repeated clicks don’t repeatedly spend tokens.
-  const bucket = Math.floor(Date.now() / (30 * 60 * 1000));
-  return `digest:${section}:${days}:${country || "*"}:${topic || "*"}:${lang || "en"}:${bucket}`;
+  // Stable key; TTL is enforced in DB by createdAt + a scheduled cleanup.
+  return `digest:${section}:${days}:${country || "*"}:${topic || "*"}:${lang || "en"}`;
 }
 
 async function resolveUserIdFromSession(session: any): Promise<string | null> {
@@ -43,7 +54,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const secRaw = String(body?.section || "global").toLowerCase();
   const section = (ALLOWED_SECTIONS.has(secRaw as Section) ? secRaw : "global") as Section;
-  const days = Number(body?.days || 7);
+  const days = normalizeDays(section, Number(body?.days || (section === "history" ? 7 : 1)));
   const country = body?.country ? String(body.country).toUpperCase() : null;
   const topic = body?.topic ? String(body.topic).toLowerCase().trim().replace(/\s+/g, "-") : null;
   const lang = body?.lang ? String(body.lang).toLowerCase() : "en";
@@ -67,13 +78,18 @@ export async function POST(req: Request) {
   });
 
   const key = digestCacheKey(section, days, country, topic, lang);
+  const cutoff = new Date(Date.now() - DIGEST_TTL_MS);
   const cached = await prisma.digest.findUnique({ where: { cacheKey: key } }).catch(() => null);
-  if (cached) {
+  if (cached && cached.createdAt >= cutoff) {
     try {
       const parsed = JSON.parse(cached.summary);
       return Response.json({ ok: true, digest: parsed, cached: true });
     } catch {
-      return Response.json({ ok: true, digest: { overview: cached.summary, themes: [], highlights: [], whyItMatters: [], watchlist: [] }, cached: true });
+      return Response.json({
+        ok: true,
+        digest: { overview: cached.summary, themes: [], highlights: [], whyItMatters: [], watchlist: [] },
+        cached: true,
+      });
     }
   }
 
@@ -91,18 +107,19 @@ export async function POST(req: Request) {
     items: items.map((it) => ({ title: it.title, sourceName: it.source.name, url: it.url })),
   });
 
-  const parsed = JSON.parse(digestJson);
+  let parsed: any;
+  try {
+    parsed = JSON.parse(digestJson);
+  } catch {
+    parsed = { overview: digestJson, themes: [], highlights: [], whyItMatters: [], watchlist: [] };
+  }
 
+  // Upsert and refresh the TTL by setting createdAt to now.
   await prisma.digest
-    .create({
-      data: {
-        cacheKey: key,
-        section,
-        days,
-        country,
-        topic,
-        summary: digestJson,
-      },
+    .upsert({
+      where: { cacheKey: key },
+      create: { cacheKey: key, section, days, country, topic, summary: digestJson },
+      update: { summary: digestJson, section, days, country, topic, createdAt: new Date() },
     })
     .catch(() => null);
 
