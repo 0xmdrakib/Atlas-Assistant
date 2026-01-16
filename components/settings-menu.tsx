@@ -45,12 +45,29 @@ export function SettingsMenu() {
                     <button
                       key={L.code}
                       onClick={() => {
-                        setLang(L.code);
-                        setOpen(false);
-                        // Translation requires auth (so we can enforce per-user limits).
-                        if (L.code !== "en" && !session) {
-                          signIn("google");
+                        const next = L.code;
+                        if (next === lang) {
+                          setOpen(false);
+                          return;
                         }
+
+                        setLang(next);
+                        setOpen(false);
+
+                        // Translation requires auth (so we can enforce per-user limits).
+                        if (next !== "en" && !session) {
+                          signIn("google");
+                          return;
+                        }
+
+                        // Light refresh to avoid showing stale cached AI summaries/digests.
+                        setTimeout(() => {
+                          try {
+                            window.location.reload();
+                          } catch {
+                            // ignore
+                          }
+                        }, 50);
                       }}
                       className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm transition focus-ring ${
                         active ? "border-[hsl(var(--accent)/.35)] bg-black/20" : "border-soft hover:bg-white/5"
