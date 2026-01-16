@@ -1,19 +1,21 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Sparkles, ShieldCheck, Telescope, Cpu, Radar, Users, BookOpen } from "lucide-react";
+import { Sparkles, Globe, Cpu, Lightbulb, Radar, Users, Telescope, BookOpen, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AuthButton } from "@/components/auth-button";
 import { SettingsMenu } from "@/components/settings-menu";
 import { useLanguage } from "@/components/language-provider";
 
 const tabs = [
-  { href: "/news", labelKey: "tabNews" as const, icon: ShieldCheck },
-  { href: "/cosmos", labelKey: "tabCosmos" as const, icon: Telescope },
-  { href: "/innovators", labelKey: "tabInnovators" as const, icon: Cpu },
-  { href: "/signals", labelKey: "tabSignals" as const, icon: Radar },
+  { href: "/global", labelKey: "tabGlobal" as const, icon: Globe },
+  { href: "/tech", labelKey: "tabTech" as const, icon: Cpu },
+  { href: "/innovators", labelKey: "tabInnovators" as const, icon: Lightbulb },
+  { href: "/early", labelKey: "tabEarly" as const, icon: Radar },
   { href: "/creators", labelKey: "tabCreators" as const, icon: Users },
+  { href: "/universe", labelKey: "tabUniverse" as const, icon: Telescope },
   { href: "/history", labelKey: "tabHistory" as const, icon: BookOpen },
+  { href: "/faith", labelKey: "tabFaith" as const, icon: Heart },
 ];
 
 export function TabShell({ children }: { children: React.ReactNode }) {
