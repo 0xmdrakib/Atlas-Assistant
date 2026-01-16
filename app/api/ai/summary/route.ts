@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { aiSummarizeItem, aiTranslateBatch } from "@/lib/aiProviders";
+import { aiSummarizeItem } from "@/lib/aiProviders";
 import { enforceAndIncrementAiUsage } from "@/lib/aiQuota";
+import { isTranslateEnabled, translateItemBatch } from "@/lib/translateProvider";
+
+const SUMMARY_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function enabled() {
   return String(process.env.AI_SUMMARY_ENABLED || "false").toLowerCase() === "true" && Boolean(process.env.AI_SUMMARY_API_KEY);
@@ -34,37 +37,68 @@ export async function POST(req: Request) {
   const userId = await resolveUserIdFromSession(session);
   if (!userId) return Response.json({ ok: false, error: "User id missing" }, { status: 401 });
 
-  // English uses Item.aiSummary (single cache)
-  if (lang === "en") {
-    if (item.aiSummary) return Response.json({ ok: true, aiSummary: item.aiSummary, cached: true });
-    const quota = await enforceAndIncrementAiUsage({ userId, kind: "summary" });
-    if (!quota.ok) {
-      return Response.json({ ok: false, error: "Daily AI limit reached", remaining: quota.remaining }, { status: 429 });
-    }
-    const ai = await aiSummarizeItem({ title: item.title, snippet: item.summary, url: item.url, lang: "en" });
-    await prisma.item.update({ where: { id }, data: { aiSummary: ai } });
-    return Response.json({ ok: true, aiSummary: ai, cached: false, remaining: quota.remaining });
-  }
+  const cutoff = new Date(Date.now() - SUMMARY_TTL_MS);
 
-  // Non-English caches in ItemTranslation (login-gated)
-  let tr = await prisma.itemTranslation.findUnique({ where: { itemId_lang: { itemId: id, lang } } }).catch(() => null);
+  // Cache (per language) lives in ItemTranslation so we can enforce a 1h TTL uniformly.
+  let tr = await prisma.itemTranslation
+    .findUnique({ where: { itemId_lang: { itemId: id, lang } } })
+    .catch(() => null);
+
   if (!tr) {
-    const translated = await aiTranslateBatch({ lang, items: [{ title: item.title, summary: item.summary }] });
-    const t0 = translated?.[0] || { title: item.title, summary: item.summary };
-    tr = await prisma.itemTranslation.create({
-      data: { itemId: id, lang, title: t0.title, summary: t0.summary },
-    });
+    if (lang === "en") {
+      // Create a minimal row so English summaries also use the 1h TTL cache.
+      // If legacy Item.aiSummary exists, migrate it into the translation row once.
+      tr = await prisma.itemTranslation
+        .create({
+          data: {
+            itemId: id,
+            lang: "en",
+            title: item.title,
+            summary: item.summary,
+            aiSummary: item.aiSummary ?? null,
+          },
+        })
+        .catch(() => null);
+    } else if (isTranslateEnabled()) {
+      const translated = await translateItemBatch({
+        lang,
+        items: [{ title: item.title, summary: item.summary }],
+      });
+      const t0 = translated?.[0] || { title: item.title, summary: item.summary };
+      tr = await prisma.itemTranslation
+        .create({ data: { itemId: id, lang, title: t0.title, summary: t0.summary } })
+        .catch(() => null);
+    } else {
+      // Translation server not configured; still allow summaries in the requested language.
+      tr = await prisma.itemTranslation
+        .create({ data: { itemId: id, lang, title: item.title, summary: item.summary } })
+        .catch(() => null);
+    }
   }
 
-  if (tr.aiSummary) return Response.json({ ok: true, aiSummary: tr.aiSummary, cached: true });
+  if (tr?.aiSummary && tr.updatedAt >= cutoff) {
+    return Response.json({ ok: true, aiSummary: tr.aiSummary, cached: true });
+  }
 
   const quota = await enforceAndIncrementAiUsage({ userId, kind: "summary" });
   if (!quota.ok) {
     return Response.json({ ok: false, error: "Daily AI limit reached", remaining: quota.remaining }, { status: 429 });
   }
 
-  const ai = await aiSummarizeItem({ title: tr.title, snippet: tr.summary, url: item.url, lang });
-  await prisma.itemTranslation.update({ where: { itemId_lang: { itemId: id, lang } }, data: { aiSummary: ai } });
+  const ai = await aiSummarizeItem({ title: tr?.title || item.title, snippet: tr?.summary || item.summary, url: item.url, lang });
+  await prisma.itemTranslation
+    .upsert({
+      where: { itemId_lang: { itemId: id, lang } },
+      create: {
+        itemId: id,
+        lang,
+        title: tr?.title || item.title,
+        summary: tr?.summary || item.summary,
+        aiSummary: ai,
+      },
+      update: { aiSummary: ai },
+    })
+    .catch(() => null);
 
   return Response.json({ ok: true, aiSummary: ai, cached: false, remaining: quota.remaining });
 }
