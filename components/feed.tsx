@@ -4,7 +4,7 @@ import * as React from "react";
 import type { ContentItem, Section } from "@/lib/types";
 import { Card, Pill, Button, A, Segmented } from "@/components/ui";
 import { timeAgo } from "@/lib/utils";
-import { Sparkles, RefreshCcw, Zap } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { signIn, useSession } from "next-auth/react";
 import { useLanguage } from "@/components/language-provider";
 import { SpeakButton } from "@/components/speak-button";
@@ -41,7 +41,6 @@ export function Feed({ section }: { section: Section }) {
   const [digestError, setDigestError] = React.useState<string>("");
 
   const [last, setLast] = React.useState<string>("");
-  const [ingesting, setIngesting] = React.useState(false);
   const [msg, setMsg] = React.useState<string>("");
   const [loginOpen, setLoginOpen] = React.useState(false);
 
@@ -84,21 +83,6 @@ export function Feed({ section }: { section: Section }) {
     }
   }
 
-  async function ingestNow() {
-    try {
-      setIngesting(true);
-      setMsg("");
-      const r = await fetch(`/api/cron/ingest`, { cache: "no-store" });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || "ingest failed");
-      setMsg(`Ingested: ${j?.ok ? "ok" : "done"}`);
-      await load();
-    } catch (e: any) {
-      setMsg(`Ingest: ${e?.message || "failed"}`);
-    } finally {
-      setIngesting(false);
-    }
-  }
 
   React.useEffect(() => {
     load().catch(() => setItems([]));
@@ -240,15 +224,6 @@ export function Feed({ section }: { section: Section }) {
                 {t(lang, "aiSummary")}
               </Button>
 
-              <Button variant="ghost" onClick={() => load()} className="gap-2">
-                <RefreshCcw size={16} />
-                {t(lang, "refresh")}
-              </Button>
-
-              <Button variant="ghost" onClick={ingestNow} className="gap-2" disabled={ingesting}>
-                <Zap size={16} />
-                {ingesting ? t(lang, "ingesting") : t(lang, "ingestNow")}
-              </Button>
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">
