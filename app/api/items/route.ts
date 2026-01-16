@@ -6,10 +6,12 @@ import { authOptions } from "@/lib/auth";
 import { aiTranslateBatch } from "@/lib/aiProviders";
 
 const ALLOWED_DAYS = new Set([1, 7, 30]);
+const ALLOWED_SECTIONS = new Set<Section>(["global","tech","innovators","early","creators","universe","history","faith"]);
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const section = (searchParams.get("section") || "news") as Section;
+  const secRaw = String(searchParams.get("section") || "global").toLowerCase();
+  const section = (ALLOWED_SECTIONS.has(secRaw as Section) ? secRaw : "global") as Section;
   const country = (searchParams.get("country") || "").trim().toUpperCase();
   const topic = (searchParams.get("topic") || "").trim().toLowerCase();
   const daysRaw = Number(searchParams.get("days") || "7");
