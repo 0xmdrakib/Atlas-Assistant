@@ -198,12 +198,14 @@ export async function aiDigest(args: {
   const model = process.env.AI_SUMMARY_MODEL || (provider === "gemini" ? "gemini-2.0-flash" : "gpt-4o-mini");
 
   const targetLang = langLabel(args.lang);
+  const itemCount = args.items.length;
 
   const prompt = `Create a professional, readable digest for a curated feed.
 
 Section: ${args.section}
 Window: last ${args.days} day(s)
 Filters: country=${args.country || "any"}, category=${args.topic || "any"}
+Items on page: ${itemCount}
 
 Output language: ${targetLang}
 
@@ -219,6 +221,13 @@ Return ONLY JSON using this schema:
 }
 
 Guidelines:
+
+Dynamic sizing rules:
+- If itemCount < 8, keep highlights <= 6 and themes <= 4.
+- If itemCount is between 8 and 18, use the normal ranges.
+- If itemCount > 18, cap highlights at 12 and keep everything skimmable.
+
+Normal ranges (when itemCount is 8-18):
 - overview: 4-7 short sentences (still skimmable)
 - themes: 4-7 bullets
 - highlights: 8-14 bullets (1 sentence each)
