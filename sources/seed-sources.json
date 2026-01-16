@@ -1,6 +1,62 @@
 [
   {
-    "section": "cosmos",
+    "section": "tech",
+    "name": "Ars Technica",
+    "url": "https://feeds.arstechnica.com/arstechnica/index",
+    "type": "rss",
+    "trustScore": 88
+  },
+  {
+    "section": "tech",
+    "name": "MIT Technology Review",
+    "url": "https://www.technologyreview.com/feed/",
+    "type": "rss",
+    "trustScore": 90
+  },
+  {
+    "section": "tech",
+    "name": "The Verge",
+    "url": "https://www.theverge.com/rss/index.xml",
+    "type": "rss",
+    "trustScore": 78
+  },
+  {
+    "section": "tech",
+    "name": "Hacker News (HN RSS)",
+    "url": "https://hnrss.org/frontpage",
+    "type": "rss",
+    "trustScore": 70
+  },
+  {
+    "section": "tech",
+    "name": "Schneier on Security",
+    "url": "https://www.schneier.com/feed/atom/",
+    "type": "rss",
+    "trustScore": 85
+  },
+  {
+    "section": "faith",
+    "name": "Quran.com Blog",
+    "url": "https://quran.com/blog/rss.xml",
+    "type": "rss",
+    "trustScore": 78
+  },
+  {
+    "section": "faith",
+    "name": "SeekersGuidance",
+    "url": "https://seekersguidance.org/feed/",
+    "type": "rss",
+    "trustScore": 78
+  },
+  {
+    "section": "faith",
+    "name": "About Islam",
+    "url": "https://aboutislam.net/feed/",
+    "type": "rss",
+    "trustScore": 70
+  },
+  {
+    "section": "universe",
     "name": "NASA Breaking News",
     "type": "rss",
     "url": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
@@ -9,7 +65,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "JPL News",
     "type": "rss",
     "url": "https://www.jpl.nasa.gov/feed/",
@@ -18,7 +74,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "NASA Earth Observatory",
     "type": "rss",
     "url": "https://earthobservatory.nasa.gov/feeds/rss.xml",
@@ -27,7 +83,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "NASA Science",
     "type": "rss",
     "url": "https://science.nasa.gov/feed/",
@@ -36,7 +92,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "ESA Top News",
     "type": "rss",
     "url": "https://www.esa.int/rssfeed/TopNews",
@@ -45,7 +101,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "NASA Mars Exploration",
     "type": "rss",
     "url": "https://mars.nasa.gov/rss/blogs/",
@@ -54,7 +110,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "ESA Science & Exploration",
     "type": "rss",
     "url": "https://www.esa.int/rssfeed/Our_Activities/Space_Science",
@@ -63,7 +119,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "HubbleSite",
     "type": "rss",
     "url": "https://hubblesite.org/feed/news",
@@ -72,7 +128,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "arXiv astro-ph",
     "type": "rss",
     "url": "https://rss.arxiv.org/rss/astro-ph",
@@ -81,7 +137,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "arXiv physics.space-ph",
     "type": "rss",
     "url": "https://rss.arxiv.org/rss/physics.space-ph",
@@ -90,7 +146,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "Chandra X-ray Observatory",
     "type": "rss",
     "url": "https://chandra.harvard.edu/rss/index.html",
@@ -99,7 +155,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "arXiv hep-ph",
     "type": "rss",
     "url": "https://rss.arxiv.org/rss/hep-ph",
@@ -108,7 +164,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "arXiv quant-ph",
     "type": "rss",
     "url": "https://rss.arxiv.org/rss/quant-ph",
@@ -117,7 +173,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "SETI Institute",
     "type": "rss",
     "url": "https://www.seti.org/rss.xml",
@@ -126,7 +182,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "Sky & Telescope",
     "type": "rss",
     "url": "https://skyandtelescope.org/feed/",
@@ -135,7 +191,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "Space.com",
     "type": "rss",
     "url": "https://www.space.com/feeds/all",
@@ -144,7 +200,7 @@
     "enabled": true
   },
   {
-    "section": "cosmos",
+    "section": "universe",
     "name": "Universe Today",
     "type": "rss",
     "url": "https://www.universetoday.com/feed/",
@@ -504,7 +560,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "AP International",
     "type": "rss",
     "url": "https://rss.apnews.com/apf-intlnews",
@@ -513,7 +569,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "UN News",
     "type": "rss",
     "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml",
@@ -522,7 +578,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "BBC Top",
     "type": "rss",
     "url": "https://feeds.bbci.co.uk/news/rss.xml",
@@ -531,7 +587,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "BBC World",
     "type": "rss",
     "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
@@ -540,7 +596,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "Our World in Data",
     "type": "rss",
     "url": "https://ourworldindata.org/feeds/latest.xml",
@@ -549,7 +605,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "WHO News",
     "type": "rss",
     "url": "https://www.who.int/rss-feeds/news-english.xml",
@@ -558,7 +614,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "The Guardian World",
     "type": "rss",
     "url": "https://www.theguardian.com/world/rss",
@@ -567,7 +623,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "DW Top",
     "type": "rss",
     "url": "https://rss.dw.com/rdf/en/top-stories",
@@ -576,7 +632,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "NPR World",
     "type": "rss",
     "url": "https://feeds.npr.org/1004/rss.xml",
@@ -585,7 +641,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "ReliefWeb Updates",
     "type": "rss",
     "url": "https://reliefweb.int/updates/rss.xml",
@@ -594,7 +650,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "Al Jazeera All",
     "type": "rss",
     "url": "https://www.aljazeera.com/xml/rss/all.xml",
@@ -603,7 +659,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "France24",
     "type": "rss",
     "url": "https://www.france24.com/en/rss",
@@ -612,7 +668,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "PBS World",
     "type": "rss",
     "url": "https://www.pbs.org/newshour/feeds/rss/world",
@@ -621,7 +677,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "The Hindu International",
     "type": "rss",
     "url": "https://www.thehindu.com/news/international/feeder/default.rss",
@@ -630,7 +686,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "World Bank News",
     "type": "rss",
     "url": "https://www.worldbank.org/en/news/all?format=rss",
@@ -639,7 +695,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "ABC News (AU)",
     "type": "rss",
     "url": "https://www.abc.net.au/news/feed/51120/rss.xml",
@@ -648,7 +704,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "CBC World",
     "type": "rss",
     "url": "https://www.cbc.ca/cmlink/rss-world",
@@ -657,7 +713,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "IMF News",
     "type": "rss",
     "url": "https://www.imf.org/en/News/RSS",
@@ -666,7 +722,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "The Conversation (Global)",
     "type": "rss",
     "url": "https://theconversation.com/global/feed",
@@ -675,7 +731,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "Dawn (PK)",
     "type": "rss",
     "url": "https://www.dawn.com/feeds/home",
@@ -684,7 +740,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "Japan Times",
     "type": "rss",
     "url": "https://www.japantimes.co.jp/feed/",
@@ -693,7 +749,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "RTÉ News",
     "type": "rss",
     "url": "https://www.rte.ie/feeds/rss/?index=/news/",
@@ -702,7 +758,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "Swissinfo",
     "type": "rss",
     "url": "https://www.swissinfo.ch/eng/rss",
@@ -711,7 +767,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "The Daily Star (BD)",
     "type": "rss",
     "url": "https://www.thedailystar.net/rss.xml",
@@ -720,7 +776,7 @@
     "enabled": true
   },
   {
-    "section": "news",
+    "section": "global",
     "name": "Prothom Alo (EN)",
     "type": "rss",
     "url": "https://en.prothomalo.com/feed",
@@ -729,7 +785,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "CISA Alerts",
     "type": "rss",
     "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
@@ -738,7 +794,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "NIST News",
     "type": "rss",
     "url": "https://www.nist.gov/news-events/news/rss.xml",
@@ -747,7 +803,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "arXiv cs.AI",
     "type": "rss",
     "url": "https://rss.arxiv.org/rss/cs.AI",
@@ -756,7 +812,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "arXiv cs.CL",
     "type": "rss",
     "url": "https://rss.arxiv.org/rss/cs.CL",
@@ -765,7 +821,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "arXiv cs.CV",
     "type": "rss",
     "url": "https://rss.arxiv.org/rss/cs.CV",
@@ -774,7 +830,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "arXiv cs.LG",
     "type": "rss",
     "url": "https://rss.arxiv.org/rss/cs.LG",
@@ -783,7 +839,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "USPTO News",
     "type": "rss",
     "url": "https://www.uspto.gov/rss.xml",
@@ -792,7 +848,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "arXiv cs.SE",
     "type": "rss",
     "url": "https://rss.arxiv.org/rss/cs.SE",
@@ -801,7 +857,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "US SEC Press Releases",
     "type": "rss",
     "url": "https://www.sec.gov/rss/press.xml",
@@ -810,7 +866,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "arXiv econ.EM",
     "type": "rss",
     "url": "https://rss.arxiv.org/rss/econ.EM",
@@ -819,7 +875,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "WIPO News",
     "type": "rss",
     "url": "https://www.wipo.int/pressroom/en/rss.xml",
@@ -828,7 +884,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "EUIPO News",
     "type": "rss",
     "url": "https://euipo.europa.eu/ohimportal/en/rss?rss=press-releases",
@@ -837,7 +893,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "Patently-O",
     "type": "rss",
     "url": "https://patentlyo.com/feed",
@@ -846,7 +902,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "arXiv EESS.SY",
     "url": "https://rss.arxiv.org/rss/eess.SY",
     "type": "rss",
@@ -855,7 +911,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "CISA Alerts",
     "url": "https://www.cisa.gov/cybersecurity-advisories/alerts.xml",
     "type": "rss",
@@ -864,7 +920,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "IEEE Spectrum",
     "url": "https://spectrum.ieee.org/feed",
     "type": "rss",
@@ -873,7 +929,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "CERN News",
     "url": "https://home.cern/news/rss",
     "type": "rss",
@@ -882,7 +938,7 @@
     "enabled": true
   },
   {
-    "section": "signals",
+    "section": "early",
     "name": "ESA News",
     "url": "https://www.esa.int/rssfeed/Our_Activities",
     "type": "rss",
