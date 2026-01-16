@@ -1,15 +1,6 @@
-import { TabShell } from "@/components/tab-shell";
-import { Feed } from "@/components/feed";
-import { Suspense } from "react";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
+// Legacy route (kept for backward compatibility)
 export default function Page(){
-  return (
-    <Suspense fallback={<div className="p-6 text-sm opacity-70">Loading…</div>}>
-      <TabShell>
-        <Feed section="signals" />
-      </TabShell>
-    </Suspense>
-  );
+  redirect("/early");
 }
