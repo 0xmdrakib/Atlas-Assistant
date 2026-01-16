@@ -39,7 +39,7 @@ type Dict = Record<string, Record<string, string>>;
 const DICT: Dict = {
   en: {
     atlasAssistant: "Atlas Assistant",
-    tagline: "Signal-first streams • minimal, fast, calm.",
+    tagline: "A news portal all in one, and AI summery.",
     controls: "Controls",
     controlsHint: "Country + category + window • curated by scoring + caps • updates every 30 min",
     liveDbFeed: "Live DB feed",
