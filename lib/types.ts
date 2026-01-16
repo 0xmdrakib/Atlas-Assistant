@@ -1,4 +1,4 @@
-export type Section = "news" | "cosmos" | "innovators" | "signals" | "creators" | "history";
+export type Section = "global" | "tech" | "innovators" | "early" | "creators" | "universe" | "history" | "faith";
 export type ContentItem = {
   id: string;
   section: Section;
