@@ -69,7 +69,7 @@ const DICT: Dict = {
     dark: "Dark",
     light: "Light",
     translateNeedsLogin: "Sign in to translate the feed.",
-    translateNeedsKey: "Add AI key to translate the feed.",
+    translateNeedsKey: "Translation is unavailable (translation server not configured).",
 
     themes: "Themes",
     highlights: "Highlights",
@@ -119,7 +119,7 @@ const DICT: Dict = {
     dark: "ডার্ক",
     light: "লাইট",
     translateNeedsLogin: "ফিড ট্রান্সলেট করতে লগইন করুন।",
-    translateNeedsKey: "ট্রান্সলেট করতে এআই কী যোগ করুন।",
+    translateNeedsKey: "ট্রান্সলেট করা যাবে না (translation server কনফিগার করা নেই)।",
 
     themes: "থিম",
     highlights: "হাইলাইটস",
