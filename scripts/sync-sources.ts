@@ -74,11 +74,14 @@ function looksLowQuality(url: string): boolean {
 
 function mapSectionFromFileName(fileBase: string, fallback: Section): Section {
   const n = fileBase.toLowerCase();
-  if (/(space|astronomy|cosmo|planet|nasa|esa|physics|science)/.test(n)) return "cosmos";
-  if (/(startup|programming|developer|robot|aerospace|aviation|ai|artificial|engineering|tech)/.test(n)) return "innovators";
-  if (/(security|cyber|privacy|vulnerability|infosec|patent|filing)/.test(n)) return "signals";
-  if (/(history|heritage|museum|ancient|islam|religion|faith)/.test(n)) return "history";
+  if (/(space|astronomy|cosmo|planet|nasa|esa|physics|science)/.test(n)) return "universe";
+  if (/(quran|hadith|sunnah|fiqh|islam|religion|faith)/.test(n)) return "faith";
+  if (/(history|heritage|museum|ancient)/.test(n)) return "history";
+  if (/(signals|patent|filing|preprint|arxiv)/.test(n)) return "early";
+  if (/(security|cyber|privacy|vulnerability|infosec|programming|developer|software|tech)/.test(n)) return "tech";
+  if (/(startup|robot|aerospace|aviation|ai|artificial|engineering|hardware|innovation)/.test(n)) return "innovators";
   if (/(education|design|maker|craft|community|ethics)/.test(n)) return "creators";
+  if (/(news|world|global|politics|economy)/.test(n)) return "global";
   return fallback;
 }
 
