@@ -27,7 +27,7 @@ export function Feed({ section }: { section: Section }) {
   const [items, setItems] = React.useState<ContentItem[]>([]);
   const [country, setCountry] = React.useState("");
   const [topic, setTopic] = React.useState("");
-  const [days, setDays] = React.useState<Days>(7);
+  const [days, setDays] = React.useState<Days>(section === "history" ? 7 : 1);
 
   const [aiOpen, setAiOpen] = React.useState<Record<string, boolean>>({});
   const [aiLoading, setAiLoading] = React.useState<Record<string, boolean>>({});
@@ -83,6 +83,13 @@ export function Feed({ section }: { section: Section }) {
     }
   }
 
+  // Clamp the window selection per section.
+  React.useEffect(() => {
+    setDays((prev) => {
+      if (section === "history") return (prev === 7 || prev === 30 ? prev : 7) as Days;
+      return (prev === 1 || prev === 7 ? prev : 1) as Days;
+    });
+  }, [section]);
 
   React.useEffect(() => {
     load().catch(() => setItems([]));
@@ -202,9 +209,15 @@ export function Feed({ section }: { section: Section }) {
                 value={days}
                 onChange={(v) => setDays(v)}
                 options={[
-                  { value: 1, label: t(lang, "oneDay") },
-                  { value: 7, label: t(lang, "sevenDays") },
-                  { value: 30, label: t(lang, "thirtyDays") },
+                  ...(section === "history"
+                    ? [
+                        { value: 7 as const, label: t(lang, "sevenDays") },
+                        { value: 30 as const, label: t(lang, "thirtyDays") },
+                      ]
+                    : [
+                        { value: 1 as const, label: t(lang, "oneDay") },
+                        { value: 7 as const, label: t(lang, "sevenDays") },
+                      ]),
                 ]}
               />
 
