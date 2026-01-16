@@ -20,6 +20,9 @@ export function AuthButton() {
   if (!authed) {
     return (
       <div className="flex items-center gap-2">
+        <div className="hidden rounded-2xl border border-soft bg-black/20 px-3 py-2 text-xs text-muted sm:block">
+          Refreshes every 30 min
+        </div>
         <Button variant="ghost" className="h-9" onClick={() => signIn("google")}>Sign in</Button>
       </div>
     );
