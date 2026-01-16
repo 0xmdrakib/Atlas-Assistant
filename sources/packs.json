@@ -8,7 +8,7 @@
       "repo": "spians/awesome-RSS-feeds",
       "branch": "master",
       "directories": [
-        { "path": "countries/without_category", "defaultSection": "news" },
+          { "path": "countries/without_category", "defaultSection": "global" },
         { "path": "recommended/without_category", "defaultSection": "creators" }
       ]
     }
