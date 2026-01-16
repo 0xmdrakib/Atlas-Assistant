@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { aiDigest } from "@/lib/aiProviders";
 import { enforceAndIncrementAiUsage } from "@/lib/aiQuota";
 
+const ALLOWED_SECTIONS = new Set<Section>(["global","tech","innovators","early","creators","universe","history","faith"]);
+
 function enabled() {
   return (
     String(process.env.AI_SUMMARY_ENABLED || "false").toLowerCase() === "true" &&
@@ -39,7 +41,8 @@ export async function POST(req: Request) {
   if (!userId) return Response.json({ ok: false, error: "User id missing" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const section = String(body?.section || "news") as Section;
+  const secRaw = String(body?.section || "global").toLowerCase();
+  const section = (ALLOWED_SECTIONS.has(secRaw as Section) ? secRaw : "global") as Section;
   const days = Number(body?.days || 7);
   const country = body?.country ? String(body.country).toUpperCase() : null;
   const topic = body?.topic ? String(body.topic).toLowerCase().trim().replace(/\s+/g, "-") : null;
