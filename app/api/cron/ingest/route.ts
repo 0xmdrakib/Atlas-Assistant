@@ -5,6 +5,13 @@ import { ingestOnce } from "@/lib/ingest";
 // Ensure the handler isn't accidentally cached.
 export const dynamic = "force-dynamic";
 
+// Force Node.js runtime (Receiver + Prisma).
+export const runtime = "nodejs";
+
+// Vercel can terminate functions that exceed their maximum duration.
+// This setting is respected based on your Vercel plan and project settings.
+export const maxDuration = 60;
+
 function getSigningKeys() {
   const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
   const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
@@ -18,9 +25,7 @@ function receiverOrErrorResponse() {
   if (!nextSigningKey) missing.push("QSTASH_NEXT_SIGNING_KEY");
 
   // Explicit guard so TypeScript narrows keys to `string` below.
-  // (Even if env vars are set in Vercel, `process.env.*` is typed as `string | undefined`.)
   if (!currentSigningKey || !nextSigningKey) {
-    // Return a JSON body so QStash logs show the real reason instead of an empty 500.
     return {
       receiver: null as Receiver | null,
       errorResponse: NextResponse.json(
@@ -59,9 +64,15 @@ export async function POST(req: Request) {
     const { receiver, errorResponse } = receiverOrErrorResponse();
     if (errorResponse) return errorResponse;
 
+    // IMPORTANT: Upstash signature verification validates the JWT claims,
+    // including `sub` (the destination URL) and a hash of the raw body.
+    // The docs recommend passing the destination URL you expect.
+    const u = new URL(req.url);
+    const destinationUrl = `${u.origin}${u.pathname}`;
+
     let isValid = false;
     try {
-      isValid = await receiver!.verify({ signature, body });
+      isValid = await receiver!.verify({ signature, body, url: destinationUrl });
     } catch (e: any) {
       console.error("QStash signature verification threw:", e);
       return NextResponse.json(
@@ -107,12 +118,18 @@ export async function GET(req: Request) {
         );
       }
       if (token !== process.env.ADMIN_TOKEN) {
-        return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+        return NextResponse.json(
+          { ok: false, error: "Unauthorized" },
+          { status: 401 }
+        );
       }
     } else {
       // In preview/dev, if ADMIN_TOKEN exists, enforce it; otherwise allow.
       if (process.env.ADMIN_TOKEN && token !== process.env.ADMIN_TOKEN) {
-        return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+        return NextResponse.json(
+          { ok: false, error: "Unauthorized" },
+          { status: 401 }
+        );
       }
     }
 
