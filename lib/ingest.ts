@@ -18,6 +18,30 @@ const parser: Parser<unknown, FeedItem> = new Parser({
   headers: { "user-agent": "AtlasAssistant/1.1 (+rss)" },
 });
 
+// Backward compatibility for legacy section keys stored in DB.
+const LEGACY_SECTION_MAP: Record<string, string> = {
+  news: "global",
+  cosmos: "universe",
+  signals: "early",
+};
+
+type CanonicalSection = keyof typeof SECTION_POLICIES;
+
+function toCanonicalSection(section: string): CanonicalSection {
+  const s = String(section || "").toLowerCase();
+  const mapped = LEGACY_SECTION_MAP[s] || s;
+  // If something unexpected comes in, fall back to global.
+  if (!(mapped in SECTION_POLICIES)) return "global" as CanonicalSection;
+  return mapped as CanonicalSection;
+}
+
+function sectionAliases(canonical: CanonicalSection): string[] {
+  const aliases = Object.entries(LEGACY_SECTION_MAP)
+    .filter(([, v]) => v === canonical)
+    .map(([k]) => k);
+  return [canonical, ...aliases];
+}
+
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
@@ -39,7 +63,28 @@ function extractTopics(item: FeedItem): string[] {
     if (n) out.add(n);
   }
   const text = `${item.title || ""} ${item.contentSnippet || ""}`.toLowerCase();
-  const keywords = ["robot", "robotics", "aerospace", "satellite", "telescope", "quran", "islam", "history", "patent", "arxiv", "preprint", "open-source", "ethics", "space", "ai"];
+  const keywords = [
+    "robot",
+    "robotics",
+    "aerospace",
+    "satellite",
+    "telescope",
+    "quran",
+    "hadith",
+    "sunnah",
+    "fiqh",
+    "islam",
+    "faith",
+    "history",
+    "patent",
+    "arxiv",
+    "preprint",
+    "open-source",
+    "ethics",
+    "space",
+    "ai",
+    "security",
+  ];
   for (const k of keywords) if (text.includes(k)) out.add(normalizeTopic(k));
   return Array.from(out).slice(0, 10);
 }
@@ -64,14 +109,17 @@ function isAiDiscoveryEnabled() {
 
 async function gdeltCandidates(section: string): Promise<Array<{ title: string; snippet: string; url: string; publishedAt: Date }>> {
   const queryMap: Record<string, string> = {
-    news: "global OR conflict OR election OR economy",
-    cosmos: "NASA OR telescope OR exoplanet OR galaxy",
+    global: "global OR conflict OR election OR economy",
+    tech: "technology OR cybersecurity OR AI OR semiconductor",
     innovators: "robotics OR aerospace OR hardware prototype",
-    signals: "patent OR preprint OR arXiv OR filing",
+    early: "patent OR preprint OR arXiv OR filing",
     creators: "open-source OR tutorial OR course OR community",
+    universe: "NASA OR telescope OR exoplanet OR galaxy",
     history: "islamic history OR ottoman OR andalus OR caliphate",
+    faith: "Quran OR Hadith OR sunnah OR fiqh",
   };
-  const q = queryMap[section] || "world";
+  const canonical = toCanonicalSection(section);
+  const q = queryMap[canonical] || "world";
   const url = new URL("https://api.gdeltproject.org/api/v2/doc/doc");
   url.searchParams.set("query", q);
   url.searchParams.set("mode", "ArtList");
@@ -140,11 +188,12 @@ export async function ingestOnce() {
     // All other sections: window/caps are based on publishedAt.
     const timeField = sec === "history" ? "createdAt" : "publishedAt";
 
-    await prisma.item.deleteMany({ where: { section: sec, [timeField]: { lt: retention } } as any });
+    const secs = sectionAliases(sec as CanonicalSection);
+    await prisma.item.deleteMany({ where: { section: { in: secs }, [timeField]: { lt: retention } } as any });
     const [d, w, m] = await Promise.all([
-      prisma.item.count({ where: { section: sec, [timeField]: { gte: dayAgo } } as any }),
-      prisma.item.count({ where: { section: sec, [timeField]: { gte: weekAgo } } as any }),
-      prisma.item.count({ where: { section: sec, [timeField]: { gte: monthAgo } } as any }),
+      prisma.item.count({ where: { section: { in: secs }, [timeField]: { gte: dayAgo } } as any }),
+      prisma.item.count({ where: { section: { in: secs }, [timeField]: { gte: weekAgo } } as any }),
+      prisma.item.count({ where: { section: { in: secs }, [timeField]: { gte: monthAgo } } as any }),
     ]);
     state[sec] = { dayCount: d, weekCount: w, monthCount: m };
   }
@@ -165,7 +214,7 @@ export async function ingestOnce() {
     const sources = await prisma.source.findMany({
       where: {
         enabled: true,
-        section: sec,
+        section: { in: sectionAliases(sec as CanonicalSection) },
         trustScore: { gte: policy.minTrustScore },
       },
       orderBy: [{ lastFetchedAt: "asc" }, { trustScore: "desc" }, { createdAt: "asc" }],
@@ -210,17 +259,26 @@ export async function ingestOnce() {
     return out;
   }
 
-  const freshnessMaxDays: Record<string, number> = { news: 21, cosmos: 90, innovators: 60, signals: 30, creators: 180, history: 3650 };
+  const freshnessMaxDays: Record<string, number> = {
+    global: 21,
+    tech: 21,
+    innovators: 60,
+    early: 30,
+    creators: 180,
+    universe: 90,
+    history: 3650,
+    faith: 180,
+  };
 
   await mapLimit(selected, concurrency, async (s) => {
     if (Date.now() > hardDeadlineAt) return;
 
-    const policy = SECTION_POLICIES[s.section as keyof typeof SECTION_POLICIES];
-    if (!policy) return;
-    if (state[s.section].dayCount >= policy.dailyCap || state[s.section].weekCount >= policy.weeklyCap || state[s.section].monthCount >= policy.monthlyCap) return;
+    const sec = toCanonicalSection(s.section);
+    const policy = SECTION_POLICIES[sec];
+    if (state[sec].dayCount >= policy.dailyCap || state[sec].weekCount >= policy.weeklyCap || state[sec].monthCount >= policy.monthlyCap) return;
 
     // mark fetched
-    await prisma.source.update({ where: { id: s.id }, data: { lastFetchedAt: new Date() } }).catch(() => null);
+    await prisma.source.update({ where: { id: s.id }, data: { lastFetchedAt: new Date(), section: sec } }).catch(() => null);
 
     let feed: any;
     try {
@@ -240,7 +298,7 @@ export async function ingestOnce() {
     }
 
     const items = (feed?.items || []) as FeedItem[];
-    const maxAgeDays = freshnessMaxDays[s.section] ?? 60;
+    const maxAgeDays = freshnessMaxDays[sec] ?? 60;
     const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000);
 
     const candidates = items
@@ -267,13 +325,13 @@ export async function ingestOnce() {
 
     for (const c of candidates) {
       if (Date.now() > hardDeadlineAt) break;
-      if (state[s.section].dayCount >= policy.dailyCap || state[s.section].weekCount >= policy.weeklyCap || state[s.section].monthCount >= policy.monthlyCap) break;
+      if (state[sec].dayCount >= policy.dailyCap || state[sec].weekCount >= policy.weeklyCap || state[sec].monthCount >= policy.monthlyCap) break;
       try {
         await prisma.item.upsert({
           where: { url: c.url },
           create: {
             sourceId: s.id,
-            section: s.section,
+            section: sec,
             title: c.title,
             summary: c.snippet || c.title,
             aiSummary: null,
@@ -285,7 +343,7 @@ export async function ingestOnce() {
           },
           update: {
             sourceId: s.id,
-            section: s.section,
+            section: sec,
             title: c.title,
             summary: c.snippet || c.title,
             country: s.country || null,
@@ -295,8 +353,8 @@ export async function ingestOnce() {
           },
         });
         added += 1;
-        const effectiveTime = s.section === "history" ? new Date() : c.publishedAt;
-        bumpWindowCounts(s.section, effectiveTime);
+        const effectiveTime = sec === "history" ? new Date() : c.publishedAt;
+        bumpWindowCounts(sec, effectiveTime);
       } catch {
         skipped += 1;
       }
