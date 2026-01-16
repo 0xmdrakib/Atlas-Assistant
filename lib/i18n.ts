@@ -78,12 +78,14 @@ const DICT: Dict = {
     speak: "Speak",
     stop: "Stop",
 
-    tabNews: "News",
-    tabCosmos: "Universe + Faith",
+    tabGlobal: "Global news",
+    tabTech: "Tech news",
     tabInnovators: "Innovators",
-    tabSignals: "Early Signals",
-    tabCreators: "Great Creators",
+    tabEarly: "Early signals",
+    tabCreators: "Great creators",
+    tabUniverse: "Universe",
     tabHistory: "History",
+    tabFaith: "Faith",
   },
   bn: {
     atlasAssistant: "অ্যাটলাস অ্যাসিস্ট্যান্ট",
@@ -126,12 +128,14 @@ const DICT: Dict = {
     speak: "শুনুন",
     stop: "থামান",
 
-    tabNews: "নিউজ",
-    tabCosmos: "মহাবিশ্ব + ঈমান",
+    tabGlobal: "গ্লোবাল নিউজ",
+    tabTech: "টেক নিউজ",
     tabInnovators: "ইনোভেটরস",
-    tabSignals: "সিগন্যালস",
-    tabCreators: "ভালো ক্রিয়েটরস",
+    tabEarly: "আর্লি সিগন্যালস",
+    tabCreators: "গ্রেট ক্রিয়েটরস",
+    tabUniverse: "মহাবিশ্ব",
     tabHistory: "ইতিহাস",
+    tabFaith: "ঈমান",
   },
 };
 
