@@ -65,7 +65,7 @@ export function TabShell({ children }: { children: React.ReactNode }) {
       {children}
 
       <footer className="mt-10 text-xs text-muted">
-        Stored: 30 days rolling (History longer) • Cron: <span className="text-[hsl(var(--accent))]">/api/cron/ingest</span>
+        Stored: 30 days rolling (History longer)
       </footer>
     </div>
   );
