@@ -222,9 +222,28 @@ export async function ingestOnce() {
     await prisma.item.deleteMany({ where: { section: { in: secs }, createdAt: { lt: retention } } });
 
     const [d, w, m] = await Promise.all([
-      prisma.item.count({ where: { section: { in: secs }, createdAt: { gte: dayAgo } } }),
-      prisma.item.count({ where: { section: { in: secs }, createdAt: { gte: weekAgo } } }),
-      prisma.item.count({ where: { section: { in: secs }, createdAt: { gte: monthAgo } } }),
+      prisma.item.count({
+        where: {
+          section: { in: secs },
+          createdAt: { gte: dayAgo },
+          // Do NOT let discovery items consume feed caps.
+          source: { type: { not: "discovery" } },
+        },
+      }),
+      prisma.item.count({
+        where: {
+          section: { in: secs },
+          createdAt: { gte: weekAgo },
+          source: { type: { not: "discovery" } },
+        },
+      }),
+      prisma.item.count({
+        where: {
+          section: { in: secs },
+          createdAt: { gte: monthAgo },
+          source: { type: { not: "discovery" } },
+        },
+      }),
     ]);
     state[sec] = { dayCount: d, weekCount: w, monthCount: m };
   }
@@ -468,7 +487,7 @@ export async function ingestOnce() {
     const secs = sectionAliases(sec);
 
     const daily = await prisma.item.findMany({
-      where: { section: { in: secs }, createdAt: { gte: dayAgo } },
+      where: { section: { in: secs }, createdAt: { gte: dayAgo }, source: { type: { not: "discovery" } } },
       select: { id: true },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       take: policy.dailyCap,
@@ -476,7 +495,7 @@ export async function ingestOnce() {
     const dailyKeep = new Set(daily.map((d) => d.id));
 
     const weekly = await prisma.item.findMany({
-      where: { section: { in: secs }, createdAt: { gte: weekAgo } },
+      where: { section: { in: secs }, createdAt: { gte: weekAgo }, source: { type: { not: "discovery" } } },
       select: { id: true },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       take: policy.weeklyCap,
@@ -491,13 +510,13 @@ export async function ingestOnce() {
 
     if (keepWeek.length) {
       await prisma.item.deleteMany({
-        where: { section: { in: secs }, createdAt: { gte: weekAgo }, id: { notIn: keepWeek } },
+        where: { section: { in: secs }, createdAt: { gte: weekAgo }, source: { type: { not: "discovery" } }, id: { notIn: keepWeek } },
       });
     }
 
     if (sec === "history") {
       const monthly = await prisma.item.findMany({
-        where: { section: { in: secs }, createdAt: { gte: monthAgo } },
+        where: { section: { in: secs }, createdAt: { gte: monthAgo }, source: { type: { not: "discovery" } } },
         select: { id: true },
         orderBy: [{ score: "desc" }, { createdAt: "desc" }],
         take: policy.monthlyCap,
@@ -515,7 +534,7 @@ export async function ingestOnce() {
 
       if (keepMonth.length) {
         await prisma.item.deleteMany({
-          where: { section: { in: secs }, createdAt: { gte: monthAgo }, id: { notIn: keepMonth } },
+          where: { section: { in: secs }, createdAt: { gte: monthAgo }, source: { type: { not: "discovery" } }, id: { notIn: keepMonth } },
         });
       }
     }
