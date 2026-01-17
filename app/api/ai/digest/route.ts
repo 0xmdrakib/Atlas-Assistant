@@ -5,7 +5,18 @@ import { authOptions } from "@/lib/auth";
 import { aiDigest } from "@/lib/aiProviders";
 import { enforceAndIncrementAiUsage } from "@/lib/aiQuota";
 
-const ALLOWED_SECTIONS = new Set<Section>(["global","tech","innovators","early","creators","universe","history","faith"]);
+const ALLOWED_SECTIONS = new Set<Section>([
+  "global",
+  "tech",
+  "innovators",
+  "early",
+  "creators",
+  "universe",
+  "history",
+  "faith",
+]);
+
+type Kind = "feed" | "discovery";
 
 const DIGEST_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -14,6 +25,11 @@ function enabled() {
     String(process.env.AI_SUMMARY_ENABLED || "false").toLowerCase() === "true" &&
     Boolean(process.env.AI_SUMMARY_API_KEY)
   );
+}
+
+function normalizeKind(raw: unknown): Kind {
+  const v = String(raw || "feed").toLowerCase();
+  return v === "discovery" ? "discovery" : "feed";
 }
 
 function normalizeDays(section: Section, daysRaw: number): number {
@@ -26,9 +42,16 @@ function normalizeDays(section: Section, daysRaw: number): number {
   return daysRaw === 1 || daysRaw === 7 ? daysRaw : 1;
 }
 
-function digestCacheKey(section: string, days: number, country: string | null, topic: string | null, lang: string) {
+function digestCacheKey(
+  section: string,
+  kind: Kind,
+  days: number,
+  country: string | null,
+  topic: string | null,
+  lang: string
+) {
   // Stable key; TTL is enforced in DB by createdAt + a scheduled cleanup.
-  return `digest:${section}:${days}:${country || "*"}:${topic || "*"}:${lang || "en"}`;
+  return `digest:${section}:${kind}:${days}:${country || "*"}:${topic || "*"}:${lang || "en"}`;
 }
 
 async function resolveUserIdFromSession(session: any): Promise<string | null> {
@@ -40,7 +63,7 @@ async function resolveUserIdFromSession(session: any): Promise<string | null> {
   return u?.id || null;
 }
 
-// AI implementation lives in lib/aiProviders.ts (Gemini default, OpenAI optional)
+// AI implementation lives in lib/aiProviders.ts (Gemini default)
 
 export async function POST(req: Request) {
   if (!enabled()) return Response.json({ ok: false, error: "AI summary disabled" }, { status: 403 });
@@ -54,30 +77,33 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const secRaw = String(body?.section || "global").toLowerCase();
   const section = (ALLOWED_SECTIONS.has(secRaw as Section) ? secRaw : "global") as Section;
+  const kind = normalizeKind(body?.kind);
   const days = normalizeDays(section, Number(body?.days || (section === "history" ? 7 : 1)));
   const country = body?.country ? String(body.country).toUpperCase() : null;
   const topic = body?.topic ? String(body.topic).toLowerCase().trim().replace(/\s+/g, "-") : null;
   const lang = body?.lang ? String(body.lang).toLowerCase() : "en";
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const where: any = { section };
-  if (section === "history") {
-    // History is old content; the window means "recently added".
-    where.createdAt = { gte: since };
+
+  const where: any = { section, createdAt: { gte: since } };
+
+  if (kind === "discovery") {
+    where.source = { is: { type: "discovery" } };
   } else {
-    where.publishedAt = { gte: since };
+    where.NOT = [{ source: { is: { type: "discovery" } } }];
   }
+
   if (country) where.country = country;
   if (topic) where.topics = { has: topic };
 
   const items = await prisma.item.findMany({
     where,
     include: { source: true },
-    orderBy: [{ score: "desc" }, { publishedAt: "desc" }],
+    orderBy: [{ createdAt: "desc" }, { score: "desc" }],
     take: 50,
   });
 
-  const key = digestCacheKey(section, days, country, topic, lang);
+  const key = digestCacheKey(section, kind, days, country, topic, lang);
   const cutoff = new Date(Date.now() - DIGEST_TTL_MS);
   const cached = await prisma.digest.findUnique({ where: { cacheKey: key } }).catch(() => null);
   if (cached && cached.createdAt >= cutoff) {
