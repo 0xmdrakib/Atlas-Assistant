@@ -4,7 +4,24 @@ import type { Section } from "@/lib/types";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { isTranslateEnabled, translateItemBatch } from "@/lib/translateProvider";
-const ALLOWED_SECTIONS = new Set<Section>(["global","tech","innovators","early","creators","universe","history","faith"]);
+
+const ALLOWED_SECTIONS = new Set<Section>([
+  "global",
+  "tech",
+  "innovators",
+  "early",
+  "creators",
+  "universe",
+  "history",
+  "faith",
+]);
+
+type Kind = "feed" | "discovery";
+
+function normalizeKind(raw: unknown): Kind {
+  const v = String(raw || "feed").toLowerCase();
+  return v === "discovery" ? "discovery" : "feed";
+}
 
 function normalizeDays(section: Section, daysRaw: number): number {
   // Product rule:
@@ -20,25 +37,26 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const secRaw = String(searchParams.get("section") || "global").toLowerCase();
   const section = (ALLOWED_SECTIONS.has(secRaw as Section) ? secRaw : "global") as Section;
+
+  const kind = normalizeKind(searchParams.get("kind"));
   const country = (searchParams.get("country") || "").trim().toUpperCase();
   const topic = (searchParams.get("topic") || "").trim().toLowerCase();
   const daysRaw = Number(searchParams.get("days") || (section === "history" ? "7" : "1"));
   const days = normalizeDays(section, daysRaw);
   const lang = String(searchParams.get("lang") || "en").toLowerCase();
 
-  // Window logic (important):
-  // - For most sections, "1/7/30 days" means publish time.
-  // - For History, we allow old events but the window means "added recently" (createdAt),
-  //   otherwise History would go empty because its publishedAt can be years old.
+  // Window logic:
+  // - The product window is based on "when we collected/ingested it".
+  // - This aligns feed ordering and retention with the UI.
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const where: any = { section };
 
-  if (section === "history") {
-    // History = curated old knowledge, window is "recently added".
-    where.createdAt = { gte: since };
+  const where: any = { section, createdAt: { gte: since } };
+
+  if (kind === "discovery") {
+    where.source = { is: { type: "discovery" } };
   } else {
-    // Everything else = window by publishedAt.
-    where.publishedAt = { gte: since };
+    // Feed = everything except discovery.
+    where.NOT = [{ source: { is: { type: "discovery" } } }];
   }
 
   if (country) where.country = country;
@@ -48,14 +66,13 @@ export async function GET(req: NextRequest) {
     where,
     include: {
       source: true,
-      // Pull the translation row for the requested language so we can surface cached AI summaries.
       translations: {
         where: { lang },
         select: { title: true, summary: true, aiSummary: true },
       },
     },
-    orderBy: [{ score: "desc" }, { publishedAt: "desc" }],
-    take: 50,
+    orderBy: [{ createdAt: "desc" }, { score: "desc" }],
+    take: 80,
   });
 
   // Translation is optional and only runs when:
@@ -64,7 +81,7 @@ export async function GET(req: NextRequest) {
   // - a LibreTranslate endpoint is configured
   let requiresLogin = false;
   let translateEnabled = false;
-  let translated: Record<string, { title: string; summary: string }> = {};
+  const translated: Record<string, { title: string; summary: string }> = {};
 
   if (lang !== "en") {
     const session = await getServerSession(authOptions);
@@ -80,9 +97,7 @@ export async function GET(req: NextRequest) {
         translated[e.itemId] = { title: e.title, summary: e.summary };
       }
 
-      const missing = items
-        .filter((it) => !translated[it.id])
-        .slice(0, 12);
+      const missing = items.filter((it) => !translated[it.id]).slice(0, 12);
 
       if (missing.length) {
         const out = await translateItemBatch({
@@ -107,22 +122,34 @@ export async function GET(req: NextRequest) {
 
   return Response.json({
     items: items.map((it) => {
-      const tr = it.translations?.[0] as { title: string; summary: string; aiSummary: string | null } | undefined;
+      const tr = it.translations?.[0] as
+        | { title: string; summary: string; aiSummary: string | null }
+        | undefined;
+
       return {
-      id: it.id,
-      section: it.section,
-      title: translated[it.id]?.title || it.title,
-      summary: translated[it.id]?.summary || it.summary,
-      // AI summaries are cached per-language in ItemTranslation.
-      aiSummary: tr?.aiSummary ?? undefined,
-      sourceName: it.source.name,
-      url: it.url,
-      country: it.country ?? undefined,
-      topics: it.topics,
-      score: it.score,
-      publishedAt: it.publishedAt.toISOString(),
+        id: it.id,
+        section: it.section,
+        title: translated[it.id]?.title || it.title,
+        summary: translated[it.id]?.summary || it.summary,
+        // AI summaries are cached per-language in ItemTranslation.
+        aiSummary: tr?.aiSummary ?? undefined,
+        sourceName: it.source.name,
+        url: it.url,
+        country: it.country ?? undefined,
+        topics: it.topics,
+        score: it.score,
+        publishedAt: it.publishedAt.toISOString(),
+        createdAt: it.createdAt.toISOString(),
       };
     }),
-    meta: { section, days, count: items.length, lang, requiresLogin, translateEnabled },
+    meta: {
+      section,
+      kind,
+      days,
+      count: items.length,
+      lang,
+      requiresLogin,
+      translateEnabled,
+    },
   });
 }
