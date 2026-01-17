@@ -54,6 +54,22 @@ function recencyScore(publishedAt: Date, halfLifeHours: number) {
   return clamp(s, 0, 1);
 }
 
+function asText(v: any): string {
+  if (typeof v === "string") return v;
+  if (v == null) return "";
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (typeof v === "object") {
+    // Common shapes from RSS parsers
+    const o: any = v as any;
+    if (typeof o.href === "string") return o.href;
+    if (typeof o.url === "string") return o.url;
+    if (typeof o._ === "string") return o._;
+    if (typeof o.value === "string") return o.value;
+    if (typeof o.text === "string") return o.text;
+  }
+  return "";
+}
+
 function normalizeTopic(t: string) {
   return t.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 40);
 }
@@ -127,7 +143,7 @@ const ALLOWED_TOPIC_CODES = new Set<string>(
 
 function extractTopics(section: CanonicalSection, item: FeedItem): string[] {
   const out = new Set<string>();
-  const text = `${item.title || ""} ${item.contentSnippet || item.content || ""}`.toLowerCase();
+  const text = `${asText((item as any).title)} ${asText((item as any).contentSnippet || (item as any).content)}`.toLowerCase();
 
   const add = (t: string) => {
     const n = normalizeTopic(t);
@@ -140,8 +156,8 @@ function extractTopics(section: CanonicalSection, item: FeedItem): string[] {
   }
 
   // Then RSS-provided categories, but only if they map to known topic codes.
-  for (const c of item.categories || []) {
-    const n = normalizeTopic(c);
+  for (const c of (item as any).categories || []) {
+    const n = normalizeTopic(asText(c));
     if (n && ALLOWED_TOPIC_CODES.has(n)) add(n);
   }
 
@@ -368,9 +384,10 @@ export async function ingestOnce() {
     const candidates = items
       .map((it) => {
         const publishedAt = safeDate(it) || new Date();
-        const title = (it.title || "").trim();
-        const url = (it.link || "").trim();
-        const snippet = (it.contentSnippet || it.content || "")
+        const title = asText((it as any).title).trim();
+        const urlRaw = asText((it as any).link || (it as any).url || (it as any).guid).trim();
+        const url = urlRaw.startsWith("http") ? urlRaw : "";
+        const snippet = asText((it as any).contentSnippet || (it as any).content)
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 400);
