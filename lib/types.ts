@@ -1,4 +1,13 @@
-export type Section = "global" | "tech" | "innovators" | "early" | "creators" | "universe" | "history" | "faith";
+export type Section =
+  | "global"
+  | "tech"
+  | "innovators"
+  | "early"
+  | "creators"
+  | "universe"
+  | "history"
+  | "faith";
+
 export type ContentItem = {
   id: string;
   section: Section;
@@ -10,5 +19,6 @@ export type ContentItem = {
   country?: string;
   topics: string[];
   publishedAt: string;
+  createdAt: string;
   score: number;
 };
