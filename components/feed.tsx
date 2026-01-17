@@ -11,6 +11,8 @@ import { SpeakButton } from "@/components/speak-button";
 
 type Days = 1 | 7 | 30;
 
+type Kind = "feed" | "discovery";
+
 type DigestOutput = {
   overview: string;
   themes: string[];
@@ -28,6 +30,7 @@ export function Feed({ section }: { section: Section }) {
   const [country, setCountry] = React.useState("");
   const [topic, setTopic] = React.useState("");
   const [days, setDays] = React.useState<Days>(section === "history" ? 7 : 1);
+  const [kind, setKind] = React.useState<Kind>("feed");
 
   const [aiOpen, setAiOpen] = React.useState<Record<string, boolean>>({});
   const [aiLoading, setAiLoading] = React.useState<Record<string, boolean>>({});
@@ -54,6 +57,7 @@ export function Feed({ section }: { section: Section }) {
     const qs = new URLSearchParams();
     qs.set("section", section);
     qs.set("days", String(days));
+    qs.set("kind", kind);
     qs.set("lang", lang);
     if (country) qs.set("country", country);
     if (topic) qs.set("topic", topic);
@@ -97,7 +101,7 @@ export function Feed({ section }: { section: Section }) {
     setDigest(null);
     setDigestError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [section, country, topic, days, lang]);
+  }, [section, country, topic, days, lang, kind]);
 
   async function ensureDigest() {
     if (!aiSummaryEnabled) return;
@@ -111,7 +115,7 @@ export function Feed({ section }: { section: Section }) {
       const res = await fetch(`/api/ai/digest`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ section, days, country: country || null, topic: topic || null, lang }),
+        body: JSON.stringify({ section, kind, days, country: country || null, topic: topic || null, lang }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || `Digest failed (${res.status})`);
@@ -205,6 +209,15 @@ export function Feed({ section }: { section: Section }) {
 
           <div className="flex flex-col gap-2 sm:items-end">
             <div className="flex items-center gap-2">
+              <Segmented
+                value={kind}
+                onChange={(v) => setKind(v)}
+                options={[
+                  { value: "feed" as const, label: "Feed" },
+                  { value: "discovery" as const, label: "Discover" },
+                ]}
+              />
+
               <Segmented
                 value={days}
                 onChange={(v) => setDays(v)}
@@ -334,7 +347,7 @@ export function Feed({ section }: { section: Section }) {
             <Card key={it.id} className="p-4">
               <div className="min-w-0">
                 <div className="text-xs text-muted">
-                  {it.sourceName} • {timeAgo(it.publishedAt)} • score {it.score.toFixed(2)}
+                  {it.sourceName} • collected {timeAgo(it.createdAt)} • score {it.score.toFixed(2)}
                 </div>
                 <div className="mt-1 text-lg font-semibold leading-snug">{it.title}</div>
                 <div className="mt-2 text-sm text-muted">{it.summary}</div>
