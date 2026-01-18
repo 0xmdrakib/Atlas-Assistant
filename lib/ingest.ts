@@ -221,6 +221,14 @@ export async function ingestOnce() {
   const sections = Object.keys(SECTION_POLICIES) as Array<keyof typeof SECTION_POLICIES>;
   const perSection = Math.max(8, Math.floor(maxSourcesTotal / Math.max(1, sections.length)));
 
+  // Guardrail: If feed sources were auto-disabled after repeated fetch failures,
+  // re-enable them so ingestion can recover without manual DB edits.
+  // We only revive sources that hit the auto-disable threshold (consecutiveFails >= 25).
+  await prisma.source.updateMany({
+    where: { enabled: false, type: { not: "discovery" }, consecutiveFails: { gte: 25 } },
+    data: { enabled: true, consecutiveFails: 0 },
+  });
+
   // Window + retention are based on createdAt (collection time).
   // We allow ingest to temporarily exceed caps, then prune to keep the best items.
   const now = Date.now();
@@ -367,12 +375,7 @@ export async function ingestOnce() {
       await prisma.source
         .update({ where: { id: s.id }, data: { consecutiveFails: { increment: 1 } } })
         .catch(() => null);
-      const updated = await prisma.source
-        .findUnique({ where: { id: s.id }, select: { consecutiveFails: true } })
-        .catch(() => null);
-      if (updated?.consecutiveFails && updated.consecutiveFails >= 25) {
-        await prisma.source.update({ where: { id: s.id }, data: { enabled: false } }).catch(() => null);
-      }
+      // No auto-disable: keep consecutiveFails for observability, but do not flip enabled=false.
       skipped += 1;
       return;
     }
