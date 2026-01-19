@@ -13,13 +13,17 @@ type FeedItem = {
   categories?: string[];
 };
 
+// Many RSS endpoints return 403/429 with a missing or uncommon User-Agent.
+// Default to a mainstream browser UA to maximize compatibility; allow override.
+const DEFAULT_BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const RSS_UA = (process.env.RSS_USER_AGENT || DEFAULT_BROWSER_UA).trim();
+
 const parser: Parser<unknown, FeedItem> = new Parser({
   timeout: 20_000,
-  // Many RSS endpoints will return 403/429 if User-Agent is missing.
   headers: {
-    "user-agent":
-      process.env.RSS_USER_AGENT || "AtlasAssistant/1.1 (+rss)",
-    accept: "application/rss+xml, application/xml;q=0.9, */*;q=0.8",
+    "user-agent": RSS_UA,
+    accept: "application/rss+xml,application/atom+xml,application/xml,text/xml,*/*",
   },
 });
 
@@ -235,7 +239,9 @@ async function gdeltCandidates(section: string): Promise<
     faith: "Quran OR Hadith OR sunnah OR fiqh",
   };
   const q = encodeURIComponent(queryMap[section] || queryMap.global);
-  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=ArtList&format=json&maxrecords=25&format=json`;
+  // Keep in sync with discovery: mode=artlist + sort=datedesc.
+  // Some upstreams are case-sensitive and may return empty results otherwise.
+  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&format=json&maxrecords=25&sort=datedesc`;
 
   const res = await fetch(url, { headers: { "user-agent": "AtlasAssistant/1.1 (+gdelt)" } });
   if (!res.ok) return [];
@@ -251,10 +257,6 @@ async function gdeltCandidates(section: string): Promise<
     }))
     .filter((a: any) => a.title && a.url);
 }
-
-
-
-  
 
 type SeedSource = {
   section: string;
@@ -293,6 +295,7 @@ export async function ingestOnce() {
   const run = await prisma.ingestRun.create({ data: { ok: false } });
   let added = 0;
   let skipped = 0;
+  let fallbackAdded = 0;
 
   const hardDeadlineMs = clamp(Number(process.env.INGEST_TIMEOUT_MS || 25000), 8000, 120000);
   const hardDeadlineAt = Date.now() + hardDeadlineMs;
@@ -451,23 +454,69 @@ export async function ingestOnce() {
     if (!pushed) break;
   }
 
+  const selectedCount = selected.length;
+
 
   async function fetchText(url: string, timeoutMs = 12000) {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      const res = await fetch(url, {
-        signal: ctrl.signal,
-        headers: {
-          "user-agent": "AtlasAssistant/1.1 (+rss)",
-          accept: "application/rss+xml,application/atom+xml,application/xml,text/xml,*/*",
-        },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const attempt = async (ua: string) =>
+        await fetch(url, {
+          signal: ctrl.signal,
+          headers: {
+            "user-agent": ua,
+            accept: "application/rss+xml,application/atom+xml,application/xml,text/xml,*/*",
+          },
+        }).catch(() => null);
+
+      let res = await attempt(RSS_UA);
+
+      // If a custom UA was provided and the request is rejected, retry with
+      // the known-good browser UA.
+      if (
+        (!res || !res.ok) &&
+        RSS_UA !== DEFAULT_BROWSER_UA &&
+        (res?.status === 403 || res?.status === 429)
+      ) {
+        res = await attempt(DEFAULT_BROWSER_UA);
+      }
+
+      if (!res || !res.ok) throw new Error(`HTTP ${res?.status || "fetch_failed"}`);
       return await res.text();
     } finally {
       clearTimeout(t);
     }
+  }
+
+  async function googleNewsCandidates(section: CanonicalSection) {
+    // A pragmatic fallback: Google News RSS is resilient when publisher RSS endpoints
+    // are blocked or unavailable from serverless environments.
+    const queryMap: Record<CanonicalSection, string> = {
+      global: "global news OR world news",
+      tech: "technology news OR cybersecurity OR AI",
+      innovators: "startup funding OR robotics OR aerospace",
+      early: "arXiv OR preprint OR patent filing",
+      creators: "open source release OR tutorial OR new library",
+      universe: "NASA OR telescope OR exoplanet",
+      history: "history archaeology empire",
+      faith: "quran OR hadith OR fiqh",
+    };
+
+    const q = encodeURIComponent(queryMap[section] || "news");
+    const url = `https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`;
+    const xml = await fetchText(url, 12_000);
+    const feed: any = await parser.parseString(xml);
+    const items = (feed?.items || []) as FeedItem[];
+    return items
+      .map((it) => ({
+        title: String(it.title || "").trim(),
+        url: String((it as any).link || "").trim(),
+        publishedAt: safeDate(it) || new Date(),
+        snippet: String(it.contentSnippet || it.content || "").replace(/\s+/g, " ").trim().slice(0, 240),
+      }))
+      .filter((x) => x.title && x.url)
+      .slice(0, 20);
   }
 
   async function parseFeed(url: string) {
@@ -607,6 +656,7 @@ export async function ingestOnce() {
           },
         });
         added += 1;
+        fallbackAdded += 1;
         bumpWindowCounts(sec, new Date());
       } catch {
         skipped += 1;
@@ -629,7 +679,11 @@ export async function ingestOnce() {
     });
 
     const gd = await gdeltCandidates(sec).catch(() => []);
-    const chosen = gd.slice(0, 3);
+    let chosen = gd.slice(0, 3);
+    if (chosen.length === 0) {
+      const gn = await googleNewsCandidates(sec as CanonicalSection).catch(() => []);
+      chosen = gn.slice(0, 3);
+    }
     for (const g of chosen) {
       if (state[sec].weekCount >= policy.weeklyCap + BUFFER_WEEKLY_EXTRA) break;
       try {
@@ -659,6 +713,7 @@ export async function ingestOnce() {
           },
         });
         added += 1;
+        fallbackAdded += 1;
         bumpWindowCounts(sec, new Date());
       } catch {
         skipped += 1;
@@ -730,10 +785,17 @@ export async function ingestOnce() {
     await enforceSectionCaps(sec as CanonicalSection).catch(() => null);
   }
 
+  const [rssTotal, rssEnabled] = await Promise.all([
+    prisma.source.count({ where: { type: { equals: "rss", mode: "insensitive" } } }),
+    prisma.source.count({ where: { type: { equals: "rss", mode: "insensitive" }, enabled: true } }),
+  ]);
+
+  const message = `ok rssEnabled=${rssEnabled} rssTotal=${rssTotal} selected=${selectedCount} fallbackAdded=${fallbackAdded}`;
+
   await prisma.ingestRun.update({
     where: { id: run.id },
-    data: { finishedAt: new Date(), ok: true, added, skipped, message: "ok" },
+    data: { finishedAt: new Date(), ok: true, added, skipped, message },
   });
 
-  return { ok: true, added, skipped };
+  return { ok: true, added, skipped, stats: { rssTotal, rssEnabled, selected: selectedCount, fallbackAdded } };
 }
