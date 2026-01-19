@@ -7,7 +7,14 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Atlas Assistant",
-  description: "Signal-first personal assistant.",
+  description: "A news portal all in one, and AI summery.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/icon.png", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png" }],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
