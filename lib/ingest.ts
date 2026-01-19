@@ -569,6 +569,10 @@ async function fetchText(url: string, timeoutMs = 12000) {
             topics: c.topics,
             score: c.score,
             publishedAt: c.publishedAt,
+            // Treat `createdAt` as "collectedAt" so the 1-day/7-day windows
+            // show items that are still surfacing in the feed even if the URL
+            // already existed in the DB.
+            createdAt: new Date(),
           },
         });
         added += 1;
@@ -619,6 +623,8 @@ async function fetchText(url: string, timeoutMs = 12000) {
             summary: g.snippet || g.title,
             score: 0.76,
             publishedAt: g.publishedAt,
+            // Same "collectedAt" semantics for fallback items.
+            createdAt: new Date(),
           },
         });
         added += 1;
