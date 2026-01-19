@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Sparkles, Globe, Cpu, Lightbulb, Radar, Users, Telescope, BookOpen, Heart } from "lucide-react";
+import { Globe, Cpu, Lightbulb, Radar, Users, Telescope, BookOpen, Heart} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AuthButton } from "@/components/auth-button";
 import { SettingsMenu } from "@/components/settings-menu";
@@ -29,7 +30,7 @@ export function TabShell({ children }: { children: React.ReactNode }) {
       <header className="mb-7 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <Sparkles size={18} className="text-[hsl(var(--accent))]" />
+            <Image src="/icon.png" alt="Atlas Assistant" width={18} height={18} className="rounded-md" priority />
             {t(lang, "atlasAssistant")}
           </div>
           <div className="mt-1 text-sm text-muted">{t(lang, "tagline")}</div>
