@@ -30,7 +30,14 @@ export function TabShell({ children }: { children: React.ReactNode }) {
       <header className="mb-7 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <Image src="/icon.png" alt="Atlas Assistant" width={18} height={18} className="rounded-md" priority />
+            <Image
+              src="/icon.png"
+              alt="Atlas Assistant"
+              width={26}
+              height={26}
+              className="rounded-md"
+              priority
+            />
             {t(lang, "atlasAssistant")}
           </div>
           <div className="mt-1 text-sm text-muted">{t(lang, "tagline")}</div>
@@ -41,7 +48,7 @@ export function TabShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <nav className="mb-6 flex flex-wrap gap-2">
+      <nav className="mb-6 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2">
         {tabs.map((tab) => {
           const active = pathname === tab.href;
           const Icon = tab.icon;
@@ -50,7 +57,7 @@ export function TabShell({ children }: { children: React.ReactNode }) {
               key={tab.href}
               href={qs ? `${tab.href}?${qs}` : tab.href}
               className={cn(
-                "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-ring",
+                "inline-flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-ring sm:w-auto sm:justify-start",
                 active
                   ? "border-[hsl(var(--accent)/.35)] bg-black/25 text-[hsl(var(--fg))]"
                   : "border-soft text-muted hover:bg-white/5"
