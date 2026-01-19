@@ -68,11 +68,18 @@ export async function POST(req: Request) {
     // including `sub` (the destination URL) and a hash of the raw body.
     // The docs recommend passing the destination URL you expect.
     const u = new URL(req.url);
-    const destinationUrl = `${u.origin}${u.pathname}`;
+    const candidateUrls = [req.url, `${u.origin}${u.pathname}`];
 
     let isValid = false;
     try {
-      isValid = await receiver!.verify({ signature, body, url: destinationUrl });
+      // Upstash validates the JWT 'sub' claim against the URL you pass.
+      // Some setups include query params in the destination URL, others don't.
+      // Try both the full request URL and origin+pathname for robustness.
+      for (const url of candidateUrls) {
+        // eslint-disable-next-line no-await-in-loop
+        isValid = await receiver!.verify({ signature, body, url });
+        if (isValid) break;
+      }
     } catch (e: any) {
       console.error("QStash signature verification threw:", e);
       return NextResponse.json(
@@ -106,6 +113,42 @@ export async function POST(req: Request) {
 // Manual trigger (your UI button / debugging). Keep this protected.
 export async function GET(req: Request) {
   try {
+    // Allow QStash schedules configured as GET (common UI misconfiguration).
+    // If the request carries an Upstash-Signature, we verify it exactly like POST
+    // and run the ingest. Manual GET triggers still use ADMIN_TOKEN below.
+    const signature =
+      req.headers.get("Upstash-Signature") ?? req.headers.get("upstash-signature");
+
+    if (signature) {
+      const body = await req.text();
+      const { receiver, errorResponse } = receiverOrErrorResponse();
+      if (errorResponse) return errorResponse;
+
+      const u = new URL(req.url);
+      const candidateUrls = [req.url, `${u.origin}${u.pathname}`];
+
+      let isValid = false;
+      try {
+        for (const url of candidateUrls) {
+          // eslint-disable-next-line no-await-in-loop
+          isValid = await receiver!.verify({ signature, body, url });
+          if (isValid) break;
+        }
+      } catch (e: any) {
+        console.error("QStash signature verification threw (GET):", e);
+        return NextResponse.json(
+          { ok: false, error: "Signature verification error", message: e?.message || String(e) },
+          { status: 401 }
+        );
+      }
+
+      if (!isValid) {
+        return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
+      }
+
+      const result = await ingestOnce();
+      return NextResponse.json(result);
+    }
     const url = new URL(req.url);
     const token = url.searchParams.get("token");
 
