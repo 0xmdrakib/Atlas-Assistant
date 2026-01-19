@@ -15,7 +15,12 @@ type FeedItem = {
 
 const parser: Parser<unknown, FeedItem> = new Parser({
   timeout: 20_000,
-  headers: { "user-agent": "AtlasAssistant/1.1 (+rss)" },
+  // Many RSS endpoints will return 403/429 if User-Agent is missing.
+  headers: {
+    "user-agent":
+      process.env.RSS_USER_AGENT || "AtlasAssistant/1.1 (+rss)",
+    accept: "application/rss+xml, application/xml;q=0.9, */*;q=0.8",
+  },
 });
 
 // Backward compatibility + normalization for section keys stored in DB.
@@ -26,7 +31,10 @@ const LEGACY_SECTION_MAP: Record<string, CanonicalSection> = {
   news: "global",
   "global-news": "global",
   cosmos: "universe",
-  "universe-faith": "universe",
+  // Previously a combined section; in the 8-section architecture this maps to Faith.
+  "universe-faith": "faith",
+  "universe + faith": "faith",
+  "universe and faith": "faith",
   signals: "early",
   "early-signals": "early",
   "great-creators": "creators",
@@ -363,6 +371,21 @@ export async function ingestOnce() {
   });
 
   if (allRssSources.length === 0) {
+    // Common footgun: sources exist but all are disabled (manual toggle, or a past
+    // auto-disable experiment). If we have zero enabled RSS sources, we re-enable
+    // them so ingest can proceed.
+    const reenabled = await prisma.source.updateMany({
+      where: { enabled: false, type: { equals: "rss", mode: "insensitive" } },
+      data: { enabled: true },
+    });
+
+    if (reenabled.count > 0) {
+      allRssSources = await prisma.source.findMany({
+        where: { enabled: true, type: { equals: "rss", mode: "insensitive" } },
+        orderBy: [{ lastFetchedAt: "asc" }, { trustScore: "desc" }, { createdAt: "asc" }],
+      });
+    }
+
     const seeded = await ensureSeedSourcesInDb();
     if (seeded.seeded) {
       allRssSources = await prisma.source.findMany({
