@@ -1,6 +1,7 @@
 import Parser from "rss-parser";
 import { prisma } from "@/lib/prisma";
 import { SECTION_POLICIES } from "@/lib/section-policy";
+import seedSources from "../sources/seed-sources.json";
 
 type FeedItem = {
   title?: string;
@@ -243,6 +244,43 @@ async function gdeltCandidates(section: string): Promise<
     .filter((a: any) => a.title && a.url);
 }
 
+
+
+  
+
+type SeedSource = {
+  section: string;
+  name: string;
+  url: string;
+  country?: string;
+  trustScore?: number;
+  enabled?: boolean;
+};
+
+async function ensureSeedSourcesInDb(): Promise<{ seeded: boolean; inserted: number }> {
+  const rssCount = await prisma.source.count({
+    where: { type: { equals: "rss", mode: "insensitive" } },
+  });
+  if (rssCount > 0) return { seeded: false, inserted: 0 };
+
+  const rows = (seedSources as unknown as SeedSource[])
+    .filter((s) => s && typeof s.url === "string" && s.url.startsWith("http"))
+    .map((s) => ({
+      section: toCanonicalSection(s.section || ""),
+      name: String(s.name || s.url),
+      url: String(s.url),
+      country: s.country ? String(s.country).toUpperCase() : null,
+      trustScore: typeof s.trustScore === "number" ? s.trustScore : 70,
+      enabled: s.enabled !== false,
+      type: "rss",
+    }));
+
+  if (rows.length === 0) return { seeded: false, inserted: 0 };
+
+  const res = await prisma.source.createMany({ data: rows, skipDuplicates: true });
+  return { seeded: true, inserted: res.count ?? 0 };
+}
+
 export async function ingestOnce() {
   const run = await prisma.ingestRun.create({ data: { ok: false } });
   let added = 0;
@@ -316,13 +354,24 @@ export async function ingestOnce() {
   // Choose a rotating subset of sources so 1000+ sources stays fast.
   // IMPORTANT: We do *not* filter by section inside SQL because older rows may
   // have section values like "Early Signals" / "/global" etc. We normalize in JS.
-  const allRssSources = await prisma.source.findMany({
+  let allRssSources = await prisma.source.findMany({
     where: {
       enabled: true,
-      type: "rss",
+      type: { equals: "rss", mode: "insensitive" },
     },
     orderBy: [{ lastFetchedAt: "asc" }, { trustScore: "desc" }, { createdAt: "asc" }],
   });
+
+  if (allRssSources.length === 0) {
+    const seeded = await ensureSeedSourcesInDb();
+    if (seeded.seeded) {
+      allRssSources = await prisma.source.findMany({
+        where: { enabled: true, type: { equals: "rss", mode: "insensitive" } },
+        orderBy: [{ lastFetchedAt: "asc" }, { trustScore: "desc" }, { createdAt: "asc" }],
+      });
+    }
+  }
+
 
   const sourcesBySection: Record<CanonicalSection, any[]> = {
     global: [],
@@ -343,11 +392,15 @@ export async function ingestOnce() {
   const selected: Array<any> = [];
   for (const sec of sections) {
     const policy = SECTION_POLICIES[sec];
-    const pool = (sourcesBySection[sec] || []).filter((s) => (s.trustScore || 0) >= policy.minTrustScore);
+    const base = sourcesBySection[sec] || [];
+    let pool = base.filter((s) => (s.trustScore || 0) >= policy.minTrustScore);
+    // If trust filtering removes everything, fall back to the best available sources
+    // instead of producing an empty feed for that section.
+    if (pool.length === 0 && base.length > 0) pool = base;
     selected.push(...pool.slice(0, perSection));
   }
 
-  async function fetchText(url: string, timeoutMs = 12000) {
+async function fetchText(url: string, timeoutMs = 12000) {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
