@@ -17,23 +17,58 @@ const parser: Parser<unknown, FeedItem> = new Parser({
   headers: { "user-agent": "AtlasAssistant/1.1 (+rss)" },
 });
 
-// Backward compatibility for legacy section keys stored in DB.
-const LEGACY_SECTION_MAP: Record<string, string> = {
+// Backward compatibility + normalization for section keys stored in DB.
+// NOTE: Postgres string comparisons are case-sensitive; old rows may contain
+// titles like "Early Signals" or paths like "/global".
+const LEGACY_SECTION_MAP: Record<string, CanonicalSection> = {
+  // earlier builds
   news: "global",
+  "global-news": "global",
   cosmos: "universe",
+  "universe-faith": "universe",
   signals: "early",
+  "early-signals": "early",
+  "great-creators": "creators",
+  creators: "creators",
 };
 
 type CanonicalSection = keyof typeof SECTION_POLICIES;
 
+function normalizeSectionKey(raw: string): string {
+  // Lowercase + strip leading slash + normalize separators.
+  // Examples: "Universe + Faith" -> "universe-faith", "/Global" -> "global".
+  return String(raw || "")
+    .trim()
+    .replace(/^\/+/, "")
+    .toLowerCase()
+    .replace(/\+/g, " ")
+    .replace(/_/g, " ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function toCanonicalSection(section: string): CanonicalSection {
-  const s = String(section || "").toLowerCase();
-  const mapped = LEGACY_SECTION_MAP[s] || s;
-  if (!(mapped in SECTION_POLICIES)) return "global" as CanonicalSection;
-  return mapped as CanonicalSection;
+  const s = normalizeSectionKey(section);
+
+  // Direct map for known legacy labels
+  const mapped = LEGACY_SECTION_MAP[s] || (s as any);
+  if (mapped in SECTION_POLICIES) return mapped as CanonicalSection;
+
+  // Heuristics for human-readable labels
+  if (/(global|world|news)/.test(s)) return "global";
+  if (/(tech|technology|software|security|cyber)/.test(s)) return "tech";
+  if (/(innovator|innovation|startup|builder)/.test(s)) return "innovators";
+  if (/(early|signal|trend)/.test(s)) return "early";
+  if (/(creator|design|maker)/.test(s)) return "creators";
+  if (/(universe|space|cosmo|astronomy|physics)/.test(s)) return "universe";
+  if (/(history|heritage|ancient)/.test(s)) return "history";
+  if (/(faith|islam|quran|hadith|religion)/.test(s)) return "faith";
+
+  return "global";
 }
 
 function sectionAliases(canonical: CanonicalSection): string[] {
+  // Kept for callers that still want alias lists.
   const aliases = Object.entries(LEGACY_SECTION_MAP)
     .filter(([, v]) => v === canonical)
     .map(([k]) => k);
@@ -279,20 +314,37 @@ export async function ingestOnce() {
   }
 
   // Choose a rotating subset of sources so 1000+ sources stays fast.
+  // IMPORTANT: We do *not* filter by section inside SQL because older rows may
+  // have section values like "Early Signals" / "/global" etc. We normalize in JS.
+  const allRssSources = await prisma.source.findMany({
+    where: {
+      enabled: true,
+      type: "rss",
+    },
+    orderBy: [{ lastFetchedAt: "asc" }, { trustScore: "desc" }, { createdAt: "asc" }],
+  });
+
+  const sourcesBySection: Record<CanonicalSection, any[]> = {
+    global: [],
+    tech: [],
+    innovators: [],
+    early: [],
+    creators: [],
+    universe: [],
+    history: [],
+    faith: [],
+  };
+
+  for (const s of allRssSources) {
+    const canonical = toCanonicalSection(s.section);
+    (sourcesBySection[canonical] || sourcesBySection.global).push(s);
+  }
+
   const selected: Array<any> = [];
   for (const sec of sections) {
     const policy = SECTION_POLICIES[sec];
-    const sources = await prisma.source.findMany({
-      where: {
-        enabled: true,
-        type: { not: "discovery" },
-        section: { in: sectionAliases(sec as CanonicalSection) },
-        trustScore: { gte: policy.minTrustScore },
-      },
-      orderBy: [{ lastFetchedAt: "asc" }, { trustScore: "desc" }, { createdAt: "asc" }],
-      take: perSection,
-    });
-    selected.push(...sources);
+    const pool = (sourcesBySection[sec] || []).filter((s) => (s.trustScore || 0) >= policy.minTrustScore);
+    selected.push(...pool.slice(0, perSection));
   }
 
   async function fetchText(url: string, timeoutMs = 12000) {
