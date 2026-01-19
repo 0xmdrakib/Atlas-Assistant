@@ -497,6 +497,9 @@ export async function discoverOnce() {
             topics,
             score: scoreCandidate(section, c),
             publishedAt: c.publishedAt,
+            // Keep discovery items visible in time-windowed feeds by treating
+            // `createdAt` as "collectedAt".
+            createdAt: new Date(),
           },
         });
         added += 1;
