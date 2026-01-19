@@ -300,7 +300,11 @@ export async function ingestOnce() {
   const concurrency = clamp(Number(process.env.FEED_FETCH_CONCURRENCY || 8), 2, 20);
 
   const sections = Object.keys(SECTION_POLICIES) as Array<keyof typeof SECTION_POLICIES>;
-  const perSection = Math.max(8, Math.floor(maxSourcesTotal / Math.max(1, sections.length)));
+  // IMPORTANT: serverless functions have hard execution limits.
+  // If we try to fetch too many RSS sources, the function can time out before
+  // it reaches the fallback seeding step, leaving the feed empty.
+  // Keep per-section sampling small and cap total work by maxSourcesTotal.
+  const perSection = clamp(Math.floor(maxSourcesTotal / Math.max(1, sections.length)), 2, 10);
 
   // Guardrail: If feed sources were auto-disabled after repeated fetch failures,
   // re-enable them so ingestion can recover without manual DB edits.
@@ -412,18 +416,43 @@ export async function ingestOnce() {
     (sourcesBySection[canonical] || sourcesBySection.global).push(s);
   }
 
-  const selected: Array<any> = [];
+  // Build a per-section pool (trust-filtered), then select in a round-robin
+  // way so we keep diversity while still respecting maxSourcesTotal.
+  const poolBySection: Record<CanonicalSection, any[]> = {
+    global: [],
+    tech: [],
+    innovators: [],
+    early: [],
+    creators: [],
+    universe: [],
+    history: [],
+    faith: [],
+  };
+
   for (const sec of sections) {
     const policy = SECTION_POLICIES[sec];
     const base = sourcesBySection[sec] || [];
     let pool = base.filter((s) => (s.trustScore || 0) >= policy.minTrustScore);
-    // If trust filtering removes everything, fall back to the best available sources
-    // instead of producing an empty feed for that section.
     if (pool.length === 0 && base.length > 0) pool = base;
-    selected.push(...pool.slice(0, perSection));
+    poolBySection[sec] = pool;
   }
 
-async function fetchText(url: string, timeoutMs = 12000) {
+  const selected: Array<any> = [];
+  for (let i = 0; selected.length < maxSourcesTotal && i < perSection; i++) {
+    let pushed = false;
+    for (const sec of sections) {
+      const pool = poolBySection[sec] || [];
+      const s = pool[i];
+      if (!s) continue;
+      selected.push(s);
+      pushed = true;
+      if (selected.length >= maxSourcesTotal) break;
+    }
+    if (!pushed) break;
+  }
+
+
+  async function fetchText(url: string, timeoutMs = 12000) {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -451,6 +480,8 @@ async function fetchText(url: string, timeoutMs = 12000) {
     let i = 0;
     const workers = Array.from({ length: Math.min(limit, arr.length) }, async () => {
       while (i < arr.length) {
+        // Stop early if we're about to hit the serverless timeout.
+        if (Date.now() > hardDeadlineAt - 2500) break;
         const idx = i++;
         out[idx] = await fn(arr[idx]);
       }
