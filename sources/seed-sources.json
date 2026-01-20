@@ -678,15 +678,6 @@
   },
   {
     "section": "global",
-    "name": "The Hindu International",
-    "type": "rss",
-    "url": "https://www.thehindu.com/news/international/feeder/default.rss",
-    "country": "IN",
-    "trustScore": 80,
-    "enabled": true
-  },
-  {
-    "section": "global",
     "name": "World Bank News",
     "type": "rss",
     "url": "https://www.worldbank.org/en/news/all?format=rss",
