@@ -100,7 +100,9 @@ export async function POST(req: Request) {
     }
 
     const result = await ingestOnce();
-    return NextResponse.json(result);
+    const shouldRetry = !result.ok || Boolean(result.stats?.stoppedEarly);
+
+    return NextResponse.json(result, { status: shouldRetry ? 500 : 200 });
   } catch (e: any) {
     console.error("/api/cron/ingest POST failed:", e);
     return NextResponse.json(
@@ -147,7 +149,9 @@ export async function GET(req: Request) {
       }
 
       const result = await ingestOnce();
-      return NextResponse.json(result);
+      const shouldRetry = !result.ok || Boolean(result.stats?.stoppedEarly);
+
+      return NextResponse.json(result, { status: shouldRetry ? 500 : 200 });
     }
     const url = new URL(req.url);
     const token = url.searchParams.get("token");
@@ -177,7 +181,9 @@ export async function GET(req: Request) {
     }
 
     const result = await ingestOnce();
-    return NextResponse.json(result);
+    const shouldRetry = !result.ok || Boolean(result.stats?.stoppedEarly);
+
+    return NextResponse.json(result, { status: shouldRetry ? 500 : 200 });
   } catch (e: any) {
     console.error("/api/cron/ingest GET failed:", e);
     return NextResponse.json(
