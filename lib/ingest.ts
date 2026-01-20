@@ -292,6 +292,7 @@ async function ensureSeedSourcesInDb(): Promise<{ seeded: boolean; inserted: num
 }
 
 export async function ingestOnce() {
+  const startedAtMs = Date.now();
   const run = await prisma.ingestRun.create({ data: { ok: false } });
   let added = 0;
   let skipped = 0;
@@ -301,10 +302,27 @@ export async function ingestOnce() {
   // by discovery items (or by a bad filter), and ingest will do no work.
   let skippedByCaps = 0;
 
+  // Extra diagnostics for the API response (useful when you only have access
+  // to the JSON response in production).
+  let processedSources = 0;
+  let feedsParsed = 0;
+  let itemsSeen = 0;
+  let candidatesSeen = 0;
+  let stoppedEarly = false;
+
   const hardDeadlineMs = clamp(Number(process.env.INGEST_TIMEOUT_MS || 25000), 8000, 120000);
   const hardDeadlineAt = Date.now() + hardDeadlineMs;
-  const maxSourcesTotal = clamp(Number(process.env.INGEST_MAX_SOURCES_PER_RUN || 120), 30, 600);
-  const concurrency = clamp(Number(process.env.FEED_FETCH_CONCURRENCY || 8), 2, 20);
+
+  // If the budget is small (common on free serverless plans), we need to do less work
+  // or we'll hit our own deadline guard before fetching any RSS.
+  const fastMode = hardDeadlineMs <= 12000;
+
+  const maxSourcesTotal = clamp(
+    Number(process.env.INGEST_MAX_SOURCES_PER_RUN || (fastMode ? 16 : 120)),
+    8,
+    600
+  );
+  const concurrency = clamp(Number(process.env.FEED_FETCH_CONCURRENCY || (fastMode ? 4 : 8)), 2, 20);
 
   const sections = Object.keys(SECTION_POLICIES) as Array<keyof typeof SECTION_POLICIES>;
   // IMPORTANT: serverless functions have hard execution limits.
@@ -322,7 +340,10 @@ export async function ingestOnce() {
   });
 
   // Window + retention are based on createdAt (collection time).
-  // We allow ingest to temporarily exceed caps, then prune to keep the best items.
+  // NOTE: Counting 1d/7d/30d across all sections can be expensive on serverless
+  // (and can consume most of a small INGEST_TIMEOUT_MS budget). For ingestion we
+  // only need to know whether a section is completely empty (for fallbacks).
+  // We defer expensive pruning/counting work until later, and only if we have time.
   const now = Date.now();
   const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
   const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
@@ -330,38 +351,18 @@ export async function ingestOnce() {
 
   const state: Record<string, { dayCount: number; weekCount: number; monthCount: number }> = {};
   for (const sec of sections) {
-    const policy = SECTION_POLICIES[sec];
-    const retention = new Date(now - policy.retentionDays * 24 * 60 * 60 * 1000);
     const secs = sectionAliases(sec as CanonicalSection);
-
-    // Retention based on collection time.
-    await prisma.item.deleteMany({ where: { section: { in: secs }, createdAt: { lt: retention } } });
-
-    const [d, w, m] = await Promise.all([
-      prisma.item.count({
-        where: {
-          section: { in: secs },
-          createdAt: { gte: dayAgo },
-          // Do NOT let discovery items consume feed caps.
-          NOT: [{ source: { is: { type: "discovery" } } }],
-        },
-      }),
-      prisma.item.count({
-        where: {
-          section: { in: secs },
-          createdAt: { gte: weekAgo },
-          NOT: [{ source: { is: { type: "discovery" } } }],
-        },
-      }),
-      prisma.item.count({
-        where: {
-          section: { in: secs },
-          createdAt: { gte: monthAgo },
-          NOT: [{ source: { is: { type: "discovery" } } }],
-        },
-      }),
-    ]);
-    state[sec] = { dayCount: d, weekCount: w, monthCount: m };
+    const exists = await prisma.item.findFirst({
+      where: {
+        section: { in: secs },
+        createdAt: { gte: monthAgo },
+        NOT: [{ source: { is: { type: "discovery" } } }],
+      },
+      select: { id: true },
+    });
+    // We start day/week counts at 0; enforceSectionCaps (if it runs) will compute
+    // exact keeps. These counters are only used as soft guardrails in this function.
+    state[sec] = { dayCount: 0, weekCount: 0, monthCount: exists ? 1 : 0 };
   }
 
   function bumpWindowCounts(section: string, createdAt: Date) {
@@ -534,7 +535,11 @@ export async function ingestOnce() {
     const workers = Array.from({ length: Math.min(limit, arr.length) }, async () => {
       while (i < arr.length) {
         // Stop early if we're about to hit the serverless timeout.
-        if (Date.now() > hardDeadlineAt - 2500) break;
+        // Keep the buffer smaller in fastMode so we still do some work.
+        if (Date.now() > hardDeadlineAt - (fastMode ? 900 : 2200)) {
+          stoppedEarly = true;
+          break;
+        }
         const idx = i++;
         out[idx] = await fn(arr[idx]);
       }
@@ -564,6 +569,8 @@ export async function ingestOnce() {
     const sec = toCanonicalSection(s.section);
     const policy = SECTION_POLICIES[sec];
 
+    processedSources += 1;
+
     // If we're already far above caps (rare), skip to keep runtime stable.
     if (
       state[sec].dayCount >= policy.dailyCap + BUFFER_DAILY_EXTRA &&
@@ -581,6 +588,7 @@ export async function ingestOnce() {
     let feed: any;
     try {
       feed = await parseFeed(s.url);
+      feedsParsed += 1;
       await prisma.source
         .update({ where: { id: s.id }, data: { lastOkAt: new Date(), consecutiveFails: 0 } })
         .catch(() => null);
@@ -594,6 +602,7 @@ export async function ingestOnce() {
     }
 
     const items = (feed?.items || []) as FeedItem[];
+    itemsSeen += items.length;
     const maxAgeDays = freshnessMaxDays[sec] ?? 60;
     const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000);
 
@@ -623,6 +632,8 @@ export async function ingestOnce() {
       .filter((x) => x.title && x.url && x.publishedAt >= cutoff)
       .sort((a, b) => b.score - a.score)
       .slice(0, policy.perRunCap);
+
+    candidatesSeen += candidates.length;
 
     for (const c of candidates) {
       if (Date.now() > hardDeadlineAt) break;
@@ -670,7 +681,10 @@ export async function ingestOnce() {
 
   // Safety net: if a section is totally empty, seed a few items from public GDELT.
   for (const sec of sections) {
-    if (Date.now() > hardDeadlineAt - 2500) break;
+    if (Date.now() > hardDeadlineAt - (fastMode ? 900 : 2200)) {
+      stoppedEarly = true;
+      break;
+    }
 
     const policy = SECTION_POLICIES[sec];
     if (state[sec].monthCount > 0) continue;
@@ -807,7 +821,11 @@ export async function ingestOnce() {
   }
 
   for (const sec of sections) {
-    if (Date.now() > hardDeadlineAt - 1500) break;
+    // Pruning can be expensive; only run it if we have budget left.
+    if (Date.now() > hardDeadlineAt - 3500) {
+      stoppedEarly = true;
+      break;
+    }
     await enforceSectionCaps(sec as CanonicalSection).catch(() => null);
   }
 
@@ -833,6 +851,15 @@ export async function ingestOnce() {
       selected: selectedCount,
       fallbackAdded,
       skippedByCaps,
+      processedSources,
+      feedsParsed,
+      itemsSeen,
+      candidatesSeen,
+      stoppedEarly,
+      timingMs: {
+        budget: hardDeadlineMs,
+        elapsed: Date.now() - startedAtMs,
+      },
     },
   };
 }
