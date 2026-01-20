@@ -296,6 +296,10 @@ export async function ingestOnce() {
   let added = 0;
   let skipped = 0;
   let fallbackAdded = 0;
+  // Diagnostic counter: how often we skip work because caps are (apparently) reached.
+  // If this is > 0 while the UI feed is empty, your cap counters are being inflated
+  // by discovery items (or by a bad filter), and ingest will do no work.
+  let skippedByCaps = 0;
 
   const hardDeadlineMs = clamp(Number(process.env.INGEST_TIMEOUT_MS || 25000), 8000, 120000);
   const hardDeadlineAt = Date.now() + hardDeadlineMs;
@@ -339,21 +343,21 @@ export async function ingestOnce() {
           section: { in: secs },
           createdAt: { gte: dayAgo },
           // Do NOT let discovery items consume feed caps.
-          source: { type: { not: "discovery" } },
+          NOT: [{ source: { is: { type: "discovery" } } }],
         },
       }),
       prisma.item.count({
         where: {
           section: { in: secs },
           createdAt: { gte: weekAgo },
-          source: { type: { not: "discovery" } },
+          NOT: [{ source: { is: { type: "discovery" } } }],
         },
       }),
       prisma.item.count({
         where: {
           section: { in: secs },
           createdAt: { gte: monthAgo },
-          source: { type: { not: "discovery" } },
+          NOT: [{ source: { is: { type: "discovery" } } }],
         },
       }),
     ]);
@@ -565,6 +569,7 @@ export async function ingestOnce() {
       state[sec].dayCount >= policy.dailyCap + BUFFER_DAILY_EXTRA &&
       state[sec].weekCount >= policy.weeklyCap + BUFFER_WEEKLY_EXTRA
     ) {
+      skippedByCaps += 1;
       return;
     }
 
@@ -656,7 +661,6 @@ export async function ingestOnce() {
           },
         });
         added += 1;
-        fallbackAdded += 1;
         bumpWindowCounts(sec, new Date());
       } catch {
         skipped += 1;
@@ -727,7 +731,11 @@ export async function ingestOnce() {
     const secs = sectionAliases(sec);
 
     const daily = await prisma.item.findMany({
-      where: { section: { in: secs }, createdAt: { gte: dayAgo }, source: { type: { not: "discovery" } } },
+      where: {
+        section: { in: secs },
+        createdAt: { gte: dayAgo },
+        NOT: [{ source: { is: { type: "discovery" } } }],
+      },
       select: { id: true },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       take: policy.dailyCap,
@@ -735,7 +743,11 @@ export async function ingestOnce() {
     const dailyKeep = new Set(daily.map((d) => d.id));
 
     const weekly = await prisma.item.findMany({
-      where: { section: { in: secs }, createdAt: { gte: weekAgo }, source: { type: { not: "discovery" } } },
+      where: {
+        section: { in: secs },
+        createdAt: { gte: weekAgo },
+        NOT: [{ source: { is: { type: "discovery" } } }],
+      },
       select: { id: true },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       take: policy.weeklyCap,
@@ -750,13 +762,22 @@ export async function ingestOnce() {
 
     if (keepWeek.length) {
       await prisma.item.deleteMany({
-        where: { section: { in: secs }, createdAt: { gte: weekAgo }, source: { type: { not: "discovery" } }, id: { notIn: keepWeek } },
+        where: {
+          section: { in: secs },
+          createdAt: { gte: weekAgo },
+          NOT: [{ source: { is: { type: "discovery" } } }],
+          id: { notIn: keepWeek },
+        },
       });
     }
 
     if (sec === "history") {
       const monthly = await prisma.item.findMany({
-        where: { section: { in: secs }, createdAt: { gte: monthAgo }, source: { type: { not: "discovery" } } },
+        where: {
+          section: { in: secs },
+          createdAt: { gte: monthAgo },
+          NOT: [{ source: { is: { type: "discovery" } } }],
+        },
         select: { id: true },
         orderBy: [{ score: "desc" }, { createdAt: "desc" }],
         take: policy.monthlyCap,
@@ -774,7 +795,12 @@ export async function ingestOnce() {
 
       if (keepMonth.length) {
         await prisma.item.deleteMany({
-          where: { section: { in: secs }, createdAt: { gte: monthAgo }, source: { type: { not: "discovery" } }, id: { notIn: keepMonth } },
+          where: {
+            section: { in: secs },
+            createdAt: { gte: monthAgo },
+            NOT: [{ source: { is: { type: "discovery" } } }],
+            id: { notIn: keepMonth },
+          },
         });
       }
     }
@@ -797,5 +823,16 @@ export async function ingestOnce() {
     data: { finishedAt: new Date(), ok: true, added, skipped, message },
   });
 
-  return { ok: true, added, skipped, stats: { rssTotal, rssEnabled, selected: selectedCount, fallbackAdded } };
+  return {
+    ok: true,
+    added,
+    skipped,
+    stats: {
+      rssTotal,
+      rssEnabled,
+      selected: selectedCount,
+      fallbackAdded,
+      skippedByCaps,
+    },
+  };
 }
