@@ -44,7 +44,7 @@
   {
     "section": "faith",
     "name": "SeekersGuidance",
-    "url": "https://seekersguidance.org/feed/",
+    "url": "https://seekersguidance.org/seekersguidance-feed/",
     "type": "rss",
     "trustScore": 78
   },
@@ -750,7 +750,7 @@
   },
   {
     "section": "global",
-    "name": "RTÉ News",
+    "name": "RT\u00c9 News",
     "type": "rss",
     "url": "https://www.rte.ie/feeds/rss/?index=/news/",
     "country": "IE",
@@ -990,5 +990,40 @@
     "country": "US",
     "trustScore": 80,
     "enabled": true
+  },
+  {
+    "section": "tech",
+    "name": "IEEE Spectrum",
+    "url": "https://spectrum.ieee.org/customfeeds/feed/all-topics/rss",
+    "type": "rss",
+    "trustScore": 85
+  },
+  {
+    "section": "tech",
+    "name": "The Register (Headlines)",
+    "url": "https://www.theregister.com/headlines.atom",
+    "type": "rss",
+    "trustScore": 75
+  },
+  {
+    "section": "faith",
+    "name": "Religion News Service",
+    "url": "https://religionnews.com/feed/",
+    "type": "rss",
+    "trustScore": 75
+  },
+  {
+    "section": "faith",
+    "name": "Pew Research Center",
+    "url": "https://www.pewresearch.org/feed/",
+    "type": "rss",
+    "trustScore": 85
+  },
+  {
+    "section": "faith",
+    "name": "Vatican News (English)",
+    "url": "https://www.vaticannews.va/en.rss.xml",
+    "type": "rss",
+    "trustScore": 75
   }
 ]
