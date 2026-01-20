@@ -52,11 +52,14 @@ export async function POST(req: Request) {
     if (errorResponse) return errorResponse;
 
     const u = new URL(req.url);
-    const destinationUrl = `${u.origin}${u.pathname}`;
+    const candidateUrls = [req.url, `${u.origin}${u.pathname}`];
 
     let isValid = false;
     try {
-      isValid = await receiver!.verify({ signature, body, url: destinationUrl });
+      for (const url of candidateUrls) {
+        isValid = await receiver!.verify({ signature, body, url });
+        if (isValid) break;
+      }
     } catch (e: any) {
       console.error("QStash signature verification threw:", e);
       return NextResponse.json(
@@ -68,6 +71,7 @@ export async function POST(req: Request) {
         { status: 401 }
       );
     }
+
 
     if (!isValid) {
       return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
