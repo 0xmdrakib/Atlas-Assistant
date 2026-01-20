@@ -377,6 +377,12 @@ export async function discoverOnce() {
 
   let added = 0;
   let skipped = 0;
+  const skippedReasons = {
+    notDue: 0,
+    dailyCap: 0,
+    noCandidates: 0,
+    upsertError: 0,
+  };
 
   for (const section of sections) {
     const policy = SECTION_POLICIES[section];
@@ -391,6 +397,7 @@ export async function discoverOnce() {
     // Run at most every 12h per section.
     if (src.lastFetchedAt && now - new Date(src.lastFetchedAt).getTime() < 12 * 60 * 60 * 1000) {
       skipped += 1;
+      skippedReasons.notDue += 1;
       continue;
     }
 
@@ -398,6 +405,7 @@ export async function discoverOnce() {
     const dailyCount = await prisma.item.count({ where: { sourceId: src.id, createdAt: { gte: dayAgo } } });
     if (dailyCount >= 4) {
       skipped += 1;
+      skippedReasons.dailyCap += 1;
       continue;
     }
 
@@ -444,6 +452,7 @@ export async function discoverOnce() {
     if (!candidates.length) {
       await prisma.source.update({ where: { id: src.id }, data: { lastFetchedAt: new Date() } }).catch(() => null);
       skipped += 1;
+      skippedReasons.noCandidates += 1;
       continue;
     }
 
@@ -505,6 +514,7 @@ export async function discoverOnce() {
         added += 1;
       } catch {
         skipped += 1;
+        skippedReasons.upsertError += 1;
       }
     }
 
@@ -570,5 +580,5 @@ export async function discoverOnce() {
     }
   }
 
-  return { ok: true, added, skipped };
+  return { ok: true, added, skipped, stats: skippedReasons };
 }
