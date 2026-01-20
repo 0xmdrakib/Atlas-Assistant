@@ -47,6 +47,15 @@ const LEGACY_SECTION_MAP: Record<string, CanonicalSection> = {
 
 type CanonicalSection = keyof typeof SECTION_POLICIES;
 
+function envBool(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || raw === "") return fallback;
+  const v = String(raw).trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on"].includes(v)) return true;
+  if (["0", "false", "no", "n", "off"].includes(v)) return false;
+  return fallback;
+}
+
 function normalizeSectionKey(raw: string): string {
   // Lowercase + strip leading slash + normalize separators.
   // Examples: "Universe + Faith" -> "universe-faith", "/Global" -> "global".
