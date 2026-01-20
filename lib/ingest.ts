@@ -267,6 +267,32 @@ type SeedSource = {
   enabled?: boolean;
 };
 
+
+async function syncSeedSourcesIntoDb(): Promise<{ inserted: number }> {
+  const syncEnabled = envBool("SOURCE_SYNC_ENABLED", false);
+  if (!syncEnabled) return { inserted: 0 };
+
+  // Upsert *missing* seed sources into the DB (no updates to existing rows).
+  // This is intentionally lightweight so it can run as part of the ingest cron.
+  const rssSeed = seedSources.filter((src: any) => String(src?.type || "").toLowerCase() === "rss");
+  if (rssSeed.length === 0) return { inserted: 0 };
+
+  const res = await prisma.source.createMany({
+    data: rssSeed.map((src: any) => ({
+      section: src.section,
+      name: src.name,
+      url: src.url,
+      type: src.type,
+      trustScore: src.trustScore ?? 50,
+      tags: Array.isArray(src.tags) ? src.tags : [],
+      enabled: src.enabled ?? true,
+    })),
+    skipDuplicates: true,
+  });
+
+  return { inserted: res.count ?? 0 };
+}
+
 async function ensureSeedSourcesInDb(): Promise<{ seeded: boolean; inserted: number }> {
   const rssCount = await prisma.source.count({
     where: { type: { equals: "rss", mode: "insensitive" } },
@@ -310,6 +336,8 @@ export async function ingestOnce() {
   let candidatesSeen = 0;
   let stoppedEarly = false;
 
+  let seedSourcesInserted = 0;
+
   const hardDeadlineMs = clamp(Number(process.env.INGEST_TIMEOUT_MS || 25000), 8000, 120000);
   const hardDeadlineAt = Date.now() + hardDeadlineMs;
 
@@ -338,6 +366,13 @@ export async function ingestOnce() {
     where: { enabled: false, type: { not: "discovery" }, consecutiveFails: { gte: 25 } },
     data: { enabled: true, consecutiveFails: 0 },
   });
+
+  // Keep the DB in sync with sources/seed-sources.json (adds missing sources only).
+  try {
+    seedSourcesInserted = (await syncSeedSourcesIntoDb()).inserted;
+  } catch (e) {
+    console.warn("syncSeedSourcesIntoDb failed", e);
+  }
 
   // Window + retention are based on createdAt (collection time).
   // NOTE: Counting 1d/7d/30d across all sections can be expensive on serverless
@@ -834,7 +869,7 @@ export async function ingestOnce() {
     prisma.source.count({ where: { type: { equals: "rss", mode: "insensitive" }, enabled: true } }),
   ]);
 
-  const message = `ok rssEnabled=${rssEnabled} rssTotal=${rssTotal} selected=${selectedCount} fallbackAdded=${fallbackAdded}`;
+  const message = `ok rssEnabled=${rssEnabled} rssTotal=${rssTotal} selected=${selectedCount} fallbackAdded=${fallbackAdded} seedSourcesInserted=${seedSourcesInserted}`;
 
   await prisma.ingestRun.update({
     where: { id: run.id },
@@ -856,6 +891,7 @@ export async function ingestOnce() {
       itemsSeen,
       candidatesSeen,
       stoppedEarly,
+      seedSourcesInserted,
       timingMs: {
         budget: hardDeadlineMs,
         elapsed: Date.now() - startedAtMs,
