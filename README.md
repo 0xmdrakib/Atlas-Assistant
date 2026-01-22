@@ -1,1 +1,1 @@
-https://atlasassistant-black.vercel.app
+Try it: https://atlasassistant.online
