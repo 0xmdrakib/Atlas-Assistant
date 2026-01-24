@@ -157,8 +157,29 @@ export function Feed({ section }: { section: Section }) {
       ].join("\n")
     : "";
 
-  const controlsHintBase = t(lang, "controlsHintBase");
-  const updatesHint = kind === "feed" ? t(lang, "updatesEvery1h") : t(lang, "updatesEvery12h");
+  // Keep this line resilient even if the i18n dictionary is missing newer keys.
+  // If a key is missing, `t()` returns the key name; we fall back to the intended copy.
+  const isBn = (lang || "").toLowerCase().startsWith("bn");
+
+  const rawControlsHintBase = t(lang, "controlsHintBase");
+  const controlsHintBase =
+    rawControlsHintBase === "controlsHintBase"
+      ? isBn
+        ? "Country + category + window • স্কোরিং + ক্যাপস দিয়ে কিউরেটেড"
+        : "Country + category + window • curated by scoring + caps"
+      : rawControlsHintBase;
+
+  const rawUpdatesHint = kind === "feed" ? t(lang, "updatesEvery1h") : t(lang, "updatesEvery12h");
+  const updatesHint =
+    rawUpdatesHint === "updatesEvery1h"
+      ? isBn
+        ? "প্রতি ১ ঘণ্টায় আপডেট"
+        : "updates every 1 hour"
+      : rawUpdatesHint === "updatesEvery12h"
+        ? isBn
+          ? "প্রতি ১২ ঘণ্টায় আপডেট"
+          : "updates every 12 hours"
+        : rawUpdatesHint;
 
   return (
     <div className="space-y-4">
