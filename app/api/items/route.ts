@@ -23,13 +23,8 @@ function normalizeKind(raw: unknown): Kind {
   return v === "ai" ? "ai" : "feed";
 }
 
-function normalizeDays(section: Section, daysRaw: number): number {
-  // Product rule:
-  // - All sections except History: only 1 or 7 days (default 1)
-  // - History: only 7 or 30 days (default 7)
-  if (section === "history") {
-    return daysRaw === 30 || daysRaw === 7 ? daysRaw : 7;
-  }
+function normalizeDays(daysRaw: number): number {
+  // Product rule: only 1 or 7 days everywhere (default 1).
   return daysRaw === 1 || daysRaw === 7 ? daysRaw : 1;
 }
 
@@ -41,8 +36,8 @@ export async function GET(req: NextRequest) {
   const kind = normalizeKind(searchParams.get("kind"));
   const country = (searchParams.get("country") || "").trim().toUpperCase();
   const topic = (searchParams.get("topic") || "").trim().toLowerCase();
-  const daysRaw = Number(searchParams.get("days") || (section === "history" ? "7" : "1"));
-  const days = normalizeDays(section, daysRaw);
+  const daysRaw = Number(searchParams.get("days") || "1");
+  const days = normalizeDays(daysRaw);
   const lang = String(searchParams.get("lang") || "en").toLowerCase();
 
   // Window logic:
