@@ -19,13 +19,15 @@ export type SectionPolicy = {
 };
 
 const DEFAULTS = {
-  dailyCap: 7,
-  weeklyCap: 60,
+  // Product rule for feed: hourly ingest, max 1 item per section per run.
+  // => 24/day, 168/week (and DB retention is 7 days).
+  dailyCap: 24,
+  weeklyCap: 168,
 };
 
 export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
   global: {
-    perRunCap: 12,
+    perRunCap: 1,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -41,7 +43,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   tech: {
-    perRunCap: 12,
+    perRunCap: 1,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -57,7 +59,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   innovators: {
-    perRunCap: 10,
+    perRunCap: 1,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -73,7 +75,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   early: {
-    perRunCap: 10,
+    perRunCap: 1,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -89,7 +91,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   creators: {
-    perRunCap: 8,
+    perRunCap: 1,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -104,7 +106,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   universe: {
-    perRunCap: 10,
+    perRunCap: 1,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -120,7 +122,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   history: {
-    perRunCap: 6,
+    perRunCap: 1,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -136,7 +138,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   faith: {
-    perRunCap: 8,
+    perRunCap: 1,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
