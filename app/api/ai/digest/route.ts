@@ -16,7 +16,7 @@ const ALLOWED_SECTIONS = new Set<Section>([
   "faith",
 ]);
 
-type Kind = "feed" | "discovery";
+type Kind = "feed" | "ai";
 
 const DIGEST_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -29,7 +29,7 @@ function enabled() {
 
 function normalizeKind(raw: unknown): Kind {
   const v = String(raw || "feed").toLowerCase();
-  return v === "discovery" ? "discovery" : "feed";
+  return v === "ai" ? "ai" : "feed";
 }
 
 function normalizeDays(section: Section, daysRaw: number): number {
@@ -87,10 +87,12 @@ export async function POST(req: Request) {
 
   const where: any = { section, createdAt: { gte: since } };
 
-  if (kind === "discovery") {
-    where.source = { is: { type: "discovery" } };
+  if (kind === "ai") {
+    // AI = items collected by the AI search pipeline.
+    where.source = { is: { type: "ai" } };
   } else {
-    where.NOT = [{ source: { is: { type: "discovery" } } }];
+    // Feed = exclude AI + any legacy discovery items.
+    where.NOT = [{ source: { is: { type: "ai" } } }, { source: { is: { type: "discovery" } } }];
   }
 
   if (country) where.country = country;
