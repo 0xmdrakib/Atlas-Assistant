@@ -72,8 +72,8 @@ export function TabShell({ children }: { children: React.ReactNode }) {
 
       {children}
 
-      <footer className="mt-10 text-xs text-muted">
-        Stored: 30 days rolling (History longer)
+      <footer className="mt-10 flex items-center justify-center text-center text-xs text-muted">
+        © 2026 Md. Rakib • made with love and passion • All Rights Reserved.
       </footer>
     </div>
   );
