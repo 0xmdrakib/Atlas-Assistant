@@ -17,13 +17,30 @@ function receiver() {
 async function verifyQStash(req: Request): Promise<boolean> {
   const r = receiver();
   if (!r) return false;
-  const signature = req.headers.get("upstash-signature");
+  // On some platforms you may receive the header in lower case.
+  const signature = req.headers.get("Upstash-Signature") ?? req.headers.get("upstash-signature");
   if (!signature) return false;
-  const bodyText = await req.text();
-  return r
-    .verify({ signature, body: bodyText })
-    .then(() => true)
-    .catch(() => false);
+
+  // Receiver.verify expects the *raw request body*.
+  const body = await req.text();
+
+  // Upstash recommends validating the destination URL (`sub` claim) as well.
+  // Some schedules include query params; others don't. Try both variants.
+  const u = new URL(req.url);
+  const candidateUrls = [req.url, `${u.origin}${u.pathname}`];
+
+  for (const url of candidateUrls) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const ok = await r.verify({ signature, body, url });
+      if (ok) return true;
+    } catch (e) {
+      // Keep responses consistent with other cron endpoints.
+      console.error("QStash signature verification failed:", e);
+    }
+  }
+
+  return false;
 }
 
 async function runCleanup() {
