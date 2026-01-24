@@ -873,6 +873,12 @@ export async function ingestOnce() {
     await enforceSectionCaps(sec as CanonicalSection).catch(() => null);
   }
 
+  // Enforce global retention: keep only the most recent 7 days of items in the DB.
+  // (UI + API clamp the window to 1 or 7 days, and the DB should match.)
+  await prisma.item
+    .deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } })
+    .catch(() => null);
+
   const [rssTotal, rssEnabled] = await Promise.all([
     prisma.source.count({ where: { type: { equals: "rss", mode: "insensitive" } } }),
     prisma.source.count({ where: { type: { equals: "rss", mode: "insensitive" }, enabled: true } }),
