@@ -16,11 +16,11 @@ const ALLOWED_SECTIONS = new Set<Section>([
   "faith",
 ]);
 
-type Kind = "feed" | "discovery";
+type Kind = "feed" | "ai";
 
 function normalizeKind(raw: unknown): Kind {
   const v = String(raw || "feed").toLowerCase();
-  return v === "discovery" ? "discovery" : "feed";
+  return v === "ai" ? "ai" : "feed";
 }
 
 function normalizeDays(section: Section, daysRaw: number): number {
@@ -50,13 +50,33 @@ export async function GET(req: NextRequest) {
   // - This aligns feed ordering and retention with the UI.
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
+  // AI tab should show nothing unless at least one of the 3 provider keys is configured.
+  const aiSearchEnabled = Boolean(process.env.X_BEARER_TOKEN || process.env.YOUTUBE_API_KEY || process.env.GITHUB_TOKEN);
+
   const where: any = { section, createdAt: { gte: since } };
 
-  if (kind === "discovery") {
-    where.source = { is: { type: "discovery" } };
+  if (kind === "ai") {
+    if (!aiSearchEnabled) {
+      return Response.json({
+        items: [],
+        meta: {
+          section,
+          kind,
+          days,
+          count: 0,
+          lang,
+          requiresLogin: false,
+          translateEnabled: false,
+          aiSearchEnabled: false,
+        },
+      });
+    }
+
+    // AI = only items collected by our AI search pipeline.
+    where.source = { is: { type: "ai" } };
   } else {
-    // Feed = everything except discovery.
-    where.NOT = [{ source: { is: { type: "discovery" } } }];
+    // Feed = everything except AI (and legacy discovery, if any exists in the DB).
+    where.NOT = [{ source: { is: { type: "ai" } } }, { source: { is: { type: "discovery" } } }];
   }
 
   if (country) where.country = country;
@@ -150,6 +170,7 @@ export async function GET(req: NextRequest) {
       lang,
       requiresLogin,
       translateEnabled,
+      aiSearchEnabled: kind === "ai" ? aiSearchEnabled : undefined,
     },
   });
 }
