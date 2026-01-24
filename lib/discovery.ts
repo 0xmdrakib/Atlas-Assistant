@@ -1,7 +1,6 @@
 import Parser from "rss-parser";
 import { prisma } from "@/lib/prisma";
 import { SECTION_POLICIES } from "@/lib/section-policy";
-import { aiSelectImportant } from "@/lib/aiProviders";
 
 type CanonicalSection = keyof typeof SECTION_POLICIES;
 
@@ -26,7 +25,7 @@ type FeedItem = {
 
 const parser: Parser<unknown, FeedItem> = new Parser({
   timeout: 20_000,
-  headers: { "user-agent": "AtlasAssistant/1.1 (+discover)" },
+  headers: { "user-agent": "AtlasAssistant/1.1 (+ai)" },
 });
 
 function clamp(n: number, a: number, b: number) {
@@ -183,7 +182,7 @@ async function fetchText(url: string, timeoutMs = 12000) {
     const res = await fetch(url, {
       signal: ctrl.signal,
       headers: {
-        "user-agent": "AtlasAssistant/1.1 (+discover)",
+        "user-agent": "AtlasAssistant/1.1 (+ai)",
         accept: "application/rss+xml,application/atom+xml,application/xml,text/xml,*/*",
       },
     });
@@ -222,7 +221,7 @@ async function fetchGdelt(section: CanonicalSection): Promise<Candidate[]> {
   const query = encodeURIComponent(q);
   const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${query}&mode=artlist&format=json&maxrecords=30&format=json&sort=datedesc`;
 
-  const res = await fetch(url, { headers: { "user-agent": "AtlasAssistant/1.1 (+discover)" } }).catch(() => null);
+  const res = await fetch(url, { headers: { "user-agent": "AtlasAssistant/1.1 (+ai)" } }).catch(() => null);
   if (!res || !res.ok) return [];
   const data: any = await res.json().catch(() => null);
   const articles: any[] = data?.articles || [];
@@ -253,7 +252,7 @@ async function fetchGithub(q: string): Promise<Candidate[]> {
     headers: {
       accept: "application/vnd.github+json",
       authorization: `Bearer ${token}`,
-      "user-agent": "AtlasAssistant/1.1 (+discover)",
+      "user-agent": "AtlasAssistant/1.1 (+ai)",
     },
   }).catch(() => null);
 
@@ -283,7 +282,7 @@ async function fetchYouTube(q: string): Promise<Candidate[]> {
 
   const query = encodeURIComponent(q);
   const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&order=date&q=${query}&key=${key}`;
-  const res = await fetch(url, { headers: { "user-agent": "AtlasAssistant/1.1 (+discover)" } }).catch(() => null);
+  const res = await fetch(url, { headers: { "user-agent": "AtlasAssistant/1.1 (+ai)" } }).catch(() => null);
   if (!res || !res.ok) return [];
 
   const data: any = await res.json().catch(() => null);
@@ -311,32 +310,38 @@ async function fetchX(q: string): Promise<Candidate[]> {
   const token = process.env.X_BEARER_TOKEN;
   if (!token) return [];
 
-  // Twitter/X recent search (API v2). Requires bearer token.
-  const query = encodeURIComponent(`${q} -is:reply -is:retweet lang:en`);
-  const url = `https://api.twitter.com/2/tweets/search/recent?query=${query}&max_results=10&tweet.fields=created_at`;
+  // X Standard Search API (v1.1). Bearer token (app auth) supported in most tiers.
+  // Docs: https://api.x.com/1.1/search/tweets.json
+  const params = new URLSearchParams({
+    q,
+    result_type: "recent",
+    count: "15",
+  });
+  const url = `https://api.x.com/1.1/search/tweets.json?${params.toString()}`;
 
   const res = await fetch(url, {
     headers: {
       authorization: `Bearer ${token}`,
-      "user-agent": "AtlasAssistant/1.1 (+discover)",
+      "user-agent": "AtlasAssistant/1.1 (+ai)",
     },
   }).catch(() => null);
 
   if (!res || !res.ok) return [];
   const data: any = await res.json().catch(() => null);
-  const tweets: any[] = data?.data || [];
+  const statuses: any[] = data?.statuses || [];
 
-  return tweets
+  return statuses
     .map((t) => {
       const d = t?.created_at ? new Date(t.created_at) : new Date();
-      const id = String(t?.id || "").trim();
+      const id = String(t?.id_str || t?.id || "").trim();
       const text = String(t?.text || "").replace(/\s+/g, " ").trim();
+      const screenName = String(t?.user?.screen_name || "x").trim();
       return {
         title: text.slice(0, 110),
-        url: normalizeUrl(id ? `https://x.com/i/web/status/${id}` : ""),
+        url: normalizeUrl(id ? `https://x.com/${screenName}/status/${id}` : ""),
         snippet: text.slice(0, 400),
         publishedAt: isNaN(d.getTime()) ? new Date() : d,
-        sourceName: "X",
+        sourceName: `X @${screenName}`,
         baseTrust: 0.5,
       };
     })
@@ -357,16 +362,14 @@ function scoreCandidate(section: CanonicalSection, c: Candidate) {
 }
 
 function isDiscoveryEnabled() {
-  return String(process.env.AI_DISCOVERY_ENABLED || "false").toLowerCase() === "true";
-}
-
-function canUseAiPick() {
-  return Boolean(process.env.AI_DISCOVERY_API_KEY);
+  // The AI tab must be empty unless at least one of these provider keys is set.
+  // (No other sources are allowed in the AI tab.)
+  return Boolean(process.env.X_BEARER_TOKEN || process.env.YOUTUBE_API_KEY || process.env.GITHUB_TOKEN);
 }
 
 export async function discoverOnce() {
   if (!isDiscoveryEnabled()) {
-    return { ok: false, skipped: true, reason: "AI_DISCOVERY_ENABLED=false" };
+    return { ok: true, added: 0, skipped: true, reason: "No AI provider keys configured" };
   }
 
   const sections = Object.keys(SECTION_POLICIES) as CanonicalSection[];
@@ -387,11 +390,11 @@ export async function discoverOnce() {
   for (const section of sections) {
     const policy = SECTION_POLICIES[section];
 
-    const sourceUrl = `discovery:${section}`;
+    const sourceUrl = `ai:${section}`;
     const src = await prisma.source.upsert({
       where: { url: sourceUrl },
-      update: { section, name: "Discovery", type: "discovery", trustScore: 65, enabled: true },
-      create: { section, name: "Discovery", type: "discovery", url: sourceUrl, trustScore: 65, enabled: true },
+      update: { section, name: "AI", type: "ai", trustScore: 65, enabled: true },
+      create: { section, name: "AI", type: "ai", url: sourceUrl, trustScore: 65, enabled: true },
     });
 
     // Run at most every 12h per section.
@@ -412,8 +415,7 @@ export async function discoverOnce() {
     const q = sectionQuery(section);
 
     const providerLists = await Promise.allSettled([
-      fetchGdelt(section),
-      fetchGoogleNewsRss(q),
+      // AI tab allows only these three providers.
       fetchGithub(q),
       fetchYouTube(q),
       fetchX(q),
@@ -456,25 +458,8 @@ export async function discoverOnce() {
       continue;
     }
 
-    let chosenIdx: number[] = [];
-    if (canUseAiPick()) {
-      try {
-        const picks = await aiSelectImportant({
-          candidates: candidates.map(({ c, score }) => ({
-            title: c.title,
-            sourceName: c.sourceName,
-            country: null,
-            url: c.url,
-            baseScore: score,
-          })),
-        });
-        chosenIdx = Array.from(new Set(picks)).slice(0, 2);
-      } catch {
-        chosenIdx = [0, 1];
-      }
-    } else {
-      chosenIdx = [0, 1];
-    }
+    // Pick top-scoring candidates. (No LLM selection here; AI tab sources are already constrained.)
+    const chosenIdx = [0, 1];
 
     const chosen = chosenIdx
       .map((i) => candidates[i]?.c)
@@ -506,7 +491,7 @@ export async function discoverOnce() {
             topics,
             score: scoreCandidate(section, c),
             publishedAt: c.publishedAt,
-            // Keep discovery items visible in time-windowed feeds by treating
+            // Keep AI items visible in time-windowed feeds by treating
             // `createdAt` as "collectedAt".
             createdAt: new Date(),
           },
@@ -518,12 +503,12 @@ export async function discoverOnce() {
       }
     }
 
-    // Mark section discovery run time.
+    // Mark section AI run time.
     await prisma.source.update({ where: { id: src.id }, data: { lastFetchedAt: new Date() } }).catch(() => null);
 
-    // Enforce caps for discovery items so they don't grow indefinitely.
+    // Enforce caps for AI items so they don't grow indefinitely.
     const keepDaily = await prisma.item.findMany({
-      where: { section, createdAt: { gte: dayAgo }, source: { is: { type: "discovery" } } },
+      where: { section, createdAt: { gte: dayAgo }, source: { is: { type: "ai" } } },
       select: { id: true },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       take: policy.dailyCap,
@@ -532,7 +517,7 @@ export async function discoverOnce() {
     const dailyKeep = keepDaily.map((x) => x.id);
 
     const keepWeekly = await prisma.item.findMany({
-      where: { section, createdAt: { gte: weekAgo }, source: { is: { type: "discovery" } } },
+      where: { section, createdAt: { gte: weekAgo }, source: { is: { type: "ai" } } },
       select: { id: true },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       take: policy.weeklyCap,
@@ -550,13 +535,13 @@ export async function discoverOnce() {
 
     if (keepWeek.length) {
       await prisma.item.deleteMany({
-        where: { section, createdAt: { gte: weekAgo }, source: { is: { type: "discovery" } }, id: { notIn: keepWeek } },
+        where: { section, createdAt: { gte: weekAgo }, source: { is: { type: "ai" } }, id: { notIn: keepWeek } },
       });
     }
 
     if (section === "history") {
       const keepMonthly = await prisma.item.findMany({
-        where: { section, createdAt: { gte: monthAgo }, source: { is: { type: "discovery" } } },
+        where: { section, createdAt: { gte: monthAgo }, source: { is: { type: "ai" } } },
         select: { id: true },
         orderBy: [{ score: "desc" }, { createdAt: "desc" }],
         take: policy.monthlyCap,
@@ -574,7 +559,7 @@ export async function discoverOnce() {
 
       if (keepMonth.length) {
         await prisma.item.deleteMany({
-          where: { section, createdAt: { gte: monthAgo }, source: { is: { type: "discovery" } }, id: { notIn: keepMonth } },
+          where: { section, createdAt: { gte: monthAgo }, source: { is: { type: "ai" } }, id: { notIn: keepMonth } },
         });
       }
     }
