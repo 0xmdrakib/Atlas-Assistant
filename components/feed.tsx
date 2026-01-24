@@ -21,15 +21,6 @@ type DigestOutput = {
   watchlist: string[];
 };
 
-function prettyTag(raw: string) {
-  const t = String(raw || "").trim();
-  if (!t) return "";
-  const words = t.replace(/-/g, " ").split(/\s+/g).filter(Boolean);
-  return words
-    .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)))
-    .join(" ");
-}
-
 export function Feed({ section }: { section: Section }) {
   const { status } = useSession();
   const authed = status === "authenticated";
@@ -166,8 +157,28 @@ export function Feed({ section }: { section: Section }) {
       ].join("\n")
     : "";
 
-  const controlsHintBase = t(lang, "controlsHintBase");
-  const updatesHint = kind === "feed" ? t(lang, "updatesEvery1h") : t(lang, "updatesEvery12h");
+  // If a translation key is missing, our i18n helper may return the key itself.
+  // Harden this specific Controls hint so raw keys never leak into the UI.
+  const controlsHintBaseRaw = t(lang, "controlsHintBase");
+  const controlsHintBase =
+    controlsHintBaseRaw === "controlsHintBase"
+      ? lang === "bn"
+        ? "Country + category + window • স্কোরিং + ক্যাপস দিয়ে কিউরেটেড"
+        : "Country + category + window • curated by scoring + caps"
+      : controlsHintBaseRaw;
+
+  const updatesKey = kind === "feed" ? "updatesEvery1h" : "updatesEvery12h";
+  const updatesHintRaw = kind === "feed" ? t(lang, "updatesEvery1h") : t(lang, "updatesEvery12h");
+  const updatesHint =
+    updatesHintRaw === updatesKey
+      ? lang === "bn"
+        ? kind === "feed"
+          ? "প্রতি ১ ঘণ্টায় আপডেট"
+          : "প্রতি ১২ ঘণ্টায় আপডেট"
+        : kind === "feed"
+          ? "updates every 1 hour"
+          : "updates every 12 hours"
+      : updatesHintRaw;
 
   return (
     <div className="space-y-4">
@@ -353,9 +364,9 @@ export function Feed({ section }: { section: Section }) {
                 <div className="mt-2 text-sm text-muted">{it.summary}</div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {it.country ? <Pill>{String(it.country).toLowerCase()}</Pill> : null}
-                  {it.topics.slice(0, 2).map((x) => (
-                    <Pill key={x}>{prettyTag(x)}</Pill>
+                  {it.country ? <Pill>{it.country}</Pill> : null}
+                  {it.topics.slice(0, 6).map((x) => (
+                    <Pill key={x}>{x}</Pill>
                   ))}
                 </div>
 
