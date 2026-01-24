@@ -839,6 +839,20 @@ export async function ingestOnce() {
     });
     const dailyKeep = new Set(daily.map((d) => d.id));
 
+
+    // Enforce daily hard cap: keep only the top N items from the last 24 hours.
+    // NOTE: The weekly pruning below does not necessarily remove daily overflow when weeklyCap isn't reached,
+    // so we prune the day window explicitly.
+    await prisma.item.deleteMany({
+      where: {
+        section: { in: secs },
+        createdAt: { gte: dayAgo },
+        NOT: [{ source: { is: { type: "discovery" } } }, { source: { is: { type: "ai" } } }],
+        id: { notIn: Array.from(dailyKeep) },
+      },
+    });
+
+
     const weekly = await prisma.item.findMany({
       where: {
         section: { in: secs },
