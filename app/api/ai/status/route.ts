@@ -3,9 +3,15 @@ export async function GET() {
     String(process.env.AI_SUMMARY_ENABLED || "false").toLowerCase() === "true" &&
     Boolean(process.env.AI_SUMMARY_API_KEY);
 
-  // Discovery can run in heuristic mode (no AI key) or AI-pick mode (with key).
-  const discoveryEnabled = String(process.env.AI_DISCOVERY_ENABLED || "false").toLowerCase() === "true";
-  const discoveryAiPickEnabled = Boolean(process.env.AI_DISCOVERY_API_KEY);
+  // "AI" tab is powered only by the 3 search providers below.
+  // If none of these keys are set, AI results should be empty.
+  const providers = {
+    x: Boolean(process.env.X_BEARER_TOKEN),
+    youtube: Boolean(process.env.YOUTUBE_API_KEY),
+    github: Boolean(process.env.GITHUB_TOKEN),
+  };
 
-  return Response.json({ summaryEnabled, discoveryEnabled, discoveryAiPickEnabled });
+  const aiSearchEnabled = providers.x || providers.youtube || providers.github;
+
+  return Response.json({ summaryEnabled, aiSearchEnabled, providers });
 }
