@@ -293,7 +293,6 @@ async function syncSeedSourcesIntoDb(): Promise<{ inserted: number }> {
       url: src.url,
       type: src.type,
       trustScore: src.trustScore ?? 50,
-      tags: Array.isArray(src.tags) ? src.tags : [],
       enabled: src.enabled ?? true,
     })),
     skipDuplicates: true,
