@@ -11,7 +11,7 @@ import { SpeakButton } from "@/components/speak-button";
 
 type Days = 1 | 7 | 30;
 
-type Kind = "feed" | "discovery";
+type Kind = "feed" | "ai";
 
 type DigestOutput = {
   overview: string;
@@ -36,7 +36,7 @@ export function Feed({ section }: { section: Section }) {
   const [aiLoading, setAiLoading] = React.useState<Record<string, boolean>>({});
 
   const [aiSummaryEnabled, setAiSummaryEnabled] = React.useState<boolean | null>(null);
-  const [aiDiscoveryEnabled, setAiDiscoveryEnabled] = React.useState<boolean | null>(null);
+  const [aiSearchEnabled, setAiSearchEnabled] = React.useState<boolean | null>(null);
 
   const [digestOpen, setDigestOpen] = React.useState(false);
   const [digestLoading, setDigestLoading] = React.useState(false);
@@ -80,10 +80,10 @@ export function Feed({ section }: { section: Section }) {
       setMsg("");
     }
 
-    if (aiSummaryEnabled === null || aiDiscoveryEnabled === null) {
+    if (aiSummaryEnabled === null || aiSearchEnabled === null) {
       const s = await fetch(`/api/ai/status`, { cache: "no-store" }).then((r) => r.json());
       setAiSummaryEnabled(Boolean(s?.summaryEnabled));
-      setAiDiscoveryEnabled(Boolean(s?.discoveryEnabled));
+      setAiSearchEnabled(Boolean(s?.aiSearchEnabled));
     }
   }
 
@@ -201,9 +201,7 @@ export function Feed({ section }: { section: Section }) {
                 {t(lang, "lastLoaded")}: {last ? timeAgo(last) : "—"}
               </span>
               <span className="opacity-60">•</span>
-              <span>
-                AI discovery: {aiDiscoveryEnabled ? "ON" : "OFF"}
-              </span>
+              <span>AI search: {aiSearchEnabled ? "ON" : "OFF"}</span>
             </div>
           </div>
 
@@ -214,7 +212,7 @@ export function Feed({ section }: { section: Section }) {
                 onChange={(v) => setKind(v)}
                 options={[
                   { value: "feed" as const, label: "Feed" },
-                  { value: "discovery" as const, label: "Discover" },
+                  { value: "ai" as const, label: "AI" },
                 ]}
               />
 
