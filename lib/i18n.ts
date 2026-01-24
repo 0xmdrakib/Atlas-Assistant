@@ -89,7 +89,7 @@ const DICT: Dict = {
   },
   bn: {
     atlasAssistant: "অ্যাটলাস অ্যাসিস্ট্যান্ট",
-    tagline: "সিগন্যাল-ফার্স্ট স্ট্রিম • মিনিমাল, ফাস্ট, শান্ত।",
+    tagline: "এক জায়গায় সব নিউজ, সাথে এআই সামারি।",
     controls: "কন্ট্রোল",
     controlsHint: "Country + category + window • স্কোরিং + ক্যাপস দিয়ে কিউরেটেড • প্রতি ৩০ মিনিটে আপডেট",
     liveDbFeed: "লাইভ ডিবি ফিড",
