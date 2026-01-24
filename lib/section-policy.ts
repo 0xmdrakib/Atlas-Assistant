@@ -123,8 +123,8 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     perRunCap: 6,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
-    monthlyCap: 240,
-    retentionDays: 30,
+    monthlyCap: DEFAULTS.weeklyCap,
+    retentionDays: 7,
     recencyHalfLifeHours: 240,
     minTrustScore: 55,
     keywordBoosts: [
