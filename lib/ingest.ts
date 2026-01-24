@@ -128,7 +128,20 @@ function asText(v: any): string {
 }
 
 function normalizeTopic(t: string) {
-  return t.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 40);
+  const n = t.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 40);
+  if (!n) return "";
+  // Canonicalize a few common aliases so search stays predictable.
+  const ALIASES: Record<string, string> = {
+    opensource: "open-source",
+    "open-source-software": "open-source",
+    "open_source": "open-source",
+    "open-source": "open-source",
+    cyber: "cybersecurity",
+    security: "cybersecurity",
+    "climate-tech": "climate-tech",
+    climate: "climate",
+  };
+  return ALIASES[n] || n;
 }
 
 const CATEGORY_RULES: Record<CanonicalSection, Array<{ code: string; keywords: string[] }>> = {
@@ -224,7 +237,8 @@ function extractTopics(section: CanonicalSection, item: FeedItem): string[] {
   if (text.includes("culture") || text.includes("art")) add("culture");
   if (text.includes("science") || text.includes("research")) add("science");
 
-  return Array.from(out).slice(0, 10);
+  // Product rule: keep 1–2 categories per item (searchable + clean UI).
+  return Array.from(out).slice(0, 2);
 }
 
 function safeDate(item: FeedItem) {
@@ -408,6 +422,11 @@ export async function ingestOnce() {
     // exact keeps. These counters are only used as soft guardrails in this function.
     state[sec] = { dayCount: 0, weekCount: 0, monthCount: exists ? 1 : 0 };
   }
+
+  // Product rule: feed ingest is hourly and may add at most 1 new item per section per run.
+  // (This is separate from daily/weekly caps, which prune historically.)
+  const addedThisRun: Record<string, number> = {};
+  for (const sec of sections) addedThisRun[sec] = 0;
 
   function bumpWindowCounts(section: string, createdAt: Date) {
     if (createdAt >= dayAgo) state[section].dayCount += 1;
@@ -613,6 +632,9 @@ export async function ingestOnce() {
     const sec = toCanonicalSection(s.section);
     const policy = SECTION_POLICIES[sec];
 
+    // Hard per-run cap: if this section already got an item, skip remaining sources.
+    if (addedThisRun[sec] >= 1) return;
+
     processedSources += 1;
 
     // If we're already far above caps (rare), skip to keep runtime stable.
@@ -682,10 +704,15 @@ export async function ingestOnce() {
     for (const c of candidates) {
       if (Date.now() > hardDeadlineAt) break;
 
+      if (addedThisRun[sec] >= 1) break;
+
       if (state[sec].weekCount >= policy.weeklyCap + BUFFER_WEEKLY_EXTRA) break;
       if (sec === "history" && state[sec].monthCount >= policy.monthlyCap + BUFFER_MONTHLY_EXTRA) break;
 
       try {
+        // Reserve the slot before awaiting network/DB so concurrent workers
+        // don't insert multiple items for the same section.
+        addedThisRun[sec] = 1;
         await prisma.item.upsert({
           where: { url: c.url },
           create: {
@@ -718,6 +745,8 @@ export async function ingestOnce() {
         added += 1;
         bumpWindowCounts(sec, new Date());
       } catch {
+        // If the upsert fails, release the slot so another source can try.
+        addedThisRun[sec] = 0;
         skipped += 1;
       }
     }
@@ -732,23 +761,32 @@ export async function ingestOnce() {
 
     const policy = SECTION_POLICIES[sec];
     if (state[sec].monthCount > 0) continue;
+    if (addedThisRun[sec] >= 1) continue;
 
     const fallbackUrl = `gdelt:fallback:${sec}`;
     const fallbackSource = await prisma.source.upsert({
       where: { url: fallbackUrl },
-      update: { section: sec, name: "GDELT (fallback)", type: "ai", trustScore: 70, enabled: true },
-      create: { section: sec, name: "GDELT (fallback)", type: "ai", url: fallbackUrl, trustScore: 70, enabled: true },
+      update: { section: sec, name: "GDELT (fallback)", type: "fallback", trustScore: 70, enabled: true },
+      create: {
+        section: sec,
+        name: "GDELT (fallback)",
+        type: "fallback",
+        url: fallbackUrl,
+        trustScore: 70,
+        enabled: true,
+      },
     });
 
     const gd = await gdeltCandidates(sec).catch(() => []);
-    let chosen = gd.slice(0, 3);
+    let chosen = gd.slice(0, 1);
     if (chosen.length === 0) {
       const gn = await googleNewsCandidates(sec as CanonicalSection).catch(() => []);
-      chosen = gn.slice(0, 3);
+      chosen = gn.slice(0, 1);
     }
     for (const g of chosen) {
       if (state[sec].weekCount >= policy.weeklyCap + BUFFER_WEEKLY_EXTRA) break;
       try {
+        addedThisRun[sec] = 1;
         await prisma.item.upsert({
           where: { url: g.url },
           create: {
@@ -778,6 +816,7 @@ export async function ingestOnce() {
         fallbackAdded += 1;
         bumpWindowCounts(sec, new Date());
       } catch {
+        addedThisRun[sec] = 0;
         skipped += 1;
       }
     }
