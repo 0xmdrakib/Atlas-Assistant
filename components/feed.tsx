@@ -9,7 +9,7 @@ import { signIn, useSession } from "next-auth/react";
 import { useLanguage } from "@/components/language-provider";
 import { SpeakButton } from "@/components/speak-button";
 
-type Days = 1 | 7 | 30;
+type Days = 1 | 7;
 
 type Kind = "feed" | "ai";
 
@@ -29,7 +29,7 @@ export function Feed({ section }: { section: Section }) {
   const [items, setItems] = React.useState<ContentItem[]>([]);
   const [country, setCountry] = React.useState("");
   const [topic, setTopic] = React.useState("");
-  const [days, setDays] = React.useState<Days>(section === "history" ? 7 : 1);
+  const [days, setDays] = React.useState<Days>(1);
   const [kind, setKind] = React.useState<Kind>("feed");
 
   const [aiOpen, setAiOpen] = React.useState<Record<string, boolean>>({});
@@ -87,12 +87,9 @@ export function Feed({ section }: { section: Section }) {
     }
   }
 
-  // Clamp the window selection per section.
+  // Clamp the window selection (product rule: only 1 or 7 days everywhere).
   React.useEffect(() => {
-    setDays((prev) => {
-      if (section === "history") return (prev === 7 || prev === 30 ? prev : 7) as Days;
-      return (prev === 1 || prev === 7 ? prev : 1) as Days;
-    });
+    setDays((prev) => (prev === 1 || prev === 7 ? prev : 1) as Days);
   }, [section]);
 
   React.useEffect(() => {
@@ -160,6 +157,9 @@ export function Feed({ section }: { section: Section }) {
       ].join("\n")
     : "";
 
+  const controlsHintBase = t(lang, "controlsHintBase");
+  const updatesHint = kind === "feed" ? t(lang, "updatesEvery1h") : t(lang, "updatesEvery12h");
+
   return (
     <div className="space-y-4">
       {loginOpen ? (
@@ -189,7 +189,7 @@ export function Feed({ section }: { section: Section }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-1">
             <div className="text-sm font-medium">{t(lang, "controls")}</div>
-            <div className="text-xs text-muted">{t(lang, "controlsHint")}</div>
+            <div className="text-xs text-muted">{controlsHintBase} • {updatesHint}</div>
 
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
               <span className="inline-flex items-center gap-1">
@@ -204,37 +204,31 @@ export function Feed({ section }: { section: Section }) {
               <span>AI search: {aiSearchEnabled ? "ON" : "OFF"}</span>
             </div>
           </div>
-
           <div className="flex flex-col gap-2 sm:items-end">
-            <div className="flex items-center gap-2">
-              <Segmented
-                value={kind}
-                onChange={(v) => setKind(v)}
-                options={[
-                  { value: "feed" as const, label: "Feed" },
-                  { value: "ai" as const, label: "AI" },
-                ]}
-              />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex flex-wrap items-center gap-2">
+                <Segmented
+                  value={kind}
+                  onChange={(v) => setKind(v)}
+                  options={[
+                    { value: "feed" as const, label: "Feed" },
+                    { value: "ai" as const, label: "AI" },
+                  ]}
+                />
 
-              <Segmented
-                value={days}
-                onChange={(v) => setDays(v)}
-                options={[
-                  ...(section === "history"
-                    ? [
-                        { value: 7 as const, label: t(lang, "sevenDays") },
-                        { value: 30 as const, label: t(lang, "thirtyDays") },
-                      ]
-                    : [
-                        { value: 1 as const, label: t(lang, "oneDay") },
-                        { value: 7 as const, label: t(lang, "sevenDays") },
-                      ]),
-                ]}
-              />
+                <Segmented
+                  value={days}
+                  onChange={(v) => setDays(v)}
+                  options={[
+                    { value: 1 as const, label: t(lang, "oneDay") },
+                    { value: 7 as const, label: t(lang, "sevenDays") },
+                  ]}
+                />
+              </div>
 
               <Button
                 variant="ghost"
-                className="gap-2"
+                className="w-full gap-2 sm:w-auto sm:ml-auto"
                 disabled={!aiSummaryEnabled}
                 onClick={async () => {
                   if (!requireLogin()) return;
@@ -247,7 +241,6 @@ export function Feed({ section }: { section: Section }) {
                 <Sparkles size={16} className="text-[hsl(var(--accent))]" />
                 {t(lang, "aiSummary")}
               </Button>
-
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -362,7 +355,7 @@ export function Feed({ section }: { section: Section }) {
 
                   <Button
                     variant="ghost"
-                    className="gap-2"
+                    className="w-full gap-2 sm:w-auto sm:ml-auto"
                     disabled={!aiSummaryEnabled}
                     onClick={async () => {
                       if (!requireLogin()) return;
