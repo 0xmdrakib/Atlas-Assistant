@@ -293,6 +293,7 @@ async function syncSeedSourcesIntoDb(): Promise<{ inserted: number }> {
       url: src.url,
       type: src.type,
       trustScore: src.trustScore ?? 50,
+      tags: Array.isArray(src.tags) ? src.tags : [],
       enabled: src.enabled ?? true,
     })),
     skipDuplicates: true,
@@ -371,7 +372,7 @@ export async function ingestOnce() {
   // re-enable them so ingestion can recover without manual DB edits.
   // We only revive sources that hit the auto-disable threshold (consecutiveFails >= 25).
   await prisma.source.updateMany({
-    where: { enabled: false, type: { not: "discovery" }, consecutiveFails: { gte: 25 } },
+    where: { enabled: false, type: { notIn: ["discovery", "ai"] }, consecutiveFails: { gte: 25 } },
     data: { enabled: true, consecutiveFails: 0 },
   });
 
@@ -399,7 +400,7 @@ export async function ingestOnce() {
       where: {
         section: { in: secs },
         createdAt: { gte: monthAgo },
-        NOT: [{ source: { is: { type: "discovery" } } }],
+        NOT: [{ source: { is: { type: "discovery" } } }, { source: { is: { type: "ai" } } }],
       },
       select: { id: true },
     });
@@ -791,7 +792,7 @@ export async function ingestOnce() {
       where: {
         section: { in: secs },
         createdAt: { gte: dayAgo },
-        NOT: [{ source: { is: { type: "discovery" } } }],
+        NOT: [{ source: { is: { type: "discovery" } } }, { source: { is: { type: "ai" } } }],
       },
       select: { id: true },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
@@ -803,7 +804,7 @@ export async function ingestOnce() {
       where: {
         section: { in: secs },
         createdAt: { gte: weekAgo },
-        NOT: [{ source: { is: { type: "discovery" } } }],
+        NOT: [{ source: { is: { type: "discovery" } } }, { source: { is: { type: "ai" } } }],
       },
       select: { id: true },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
@@ -822,7 +823,7 @@ export async function ingestOnce() {
         where: {
           section: { in: secs },
           createdAt: { gte: weekAgo },
-          NOT: [{ source: { is: { type: "discovery" } } }],
+          NOT: [{ source: { is: { type: "discovery" } } }, { source: { is: { type: "ai" } } }],
           id: { notIn: keepWeek },
         },
       });
@@ -833,7 +834,7 @@ export async function ingestOnce() {
         where: {
           section: { in: secs },
           createdAt: { gte: monthAgo },
-          NOT: [{ source: { is: { type: "discovery" } } }],
+          NOT: [{ source: { is: { type: "discovery" } } }, { source: { is: { type: "ai" } } }],
         },
         select: { id: true },
         orderBy: [{ score: "desc" }, { createdAt: "desc" }],
@@ -855,7 +856,7 @@ export async function ingestOnce() {
           where: {
             section: { in: secs },
             createdAt: { gte: monthAgo },
-            NOT: [{ source: { is: { type: "discovery" } } }],
+            NOT: [{ source: { is: { type: "discovery" } } }, { source: { is: { type: "ai" } } }],
             id: { notIn: keepMonth },
           },
         });
