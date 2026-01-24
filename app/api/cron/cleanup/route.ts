@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const TTL_MS = 60 * 60 * 1000; // 1 hour
+const ITEM_RETENTION_DAYS = 7;
 
 function receiver() {
   const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
@@ -17,34 +18,18 @@ function receiver() {
 async function verifyQStash(req: Request): Promise<boolean> {
   const r = receiver();
   if (!r) return false;
-  // On some platforms you may receive the header in lower case.
-  const signature = req.headers.get("Upstash-Signature") ?? req.headers.get("upstash-signature");
+  const signature = req.headers.get("upstash-signature");
   if (!signature) return false;
-
-  // Receiver.verify expects the *raw request body*.
-  const body = await req.text();
-
-  // Upstash recommends validating the destination URL (`sub` claim) as well.
-  // Some schedules include query params; others don't. Try both variants.
-  const u = new URL(req.url);
-  const candidateUrls = [req.url, `${u.origin}${u.pathname}`];
-
-  for (const url of candidateUrls) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      const ok = await r.verify({ signature, body, url });
-      if (ok) return true;
-    } catch (e) {
-      // Keep responses consistent with other cron endpoints.
-      console.error("QStash signature verification failed:", e);
-    }
-  }
-
-  return false;
+  const bodyText = await req.text();
+  return r
+    .verify({ signature, body: bodyText })
+    .then(() => true)
+    .catch(() => false);
 }
 
 async function runCleanup() {
   const cutoff = new Date(Date.now() - TTL_MS);
+  const itemsCutoff = new Date(Date.now() - ITEM_RETENTION_DAYS * 24 * 60 * 60 * 1000);
 
   const digestsDeleted = await prisma.digest.deleteMany({ where: { createdAt: { lt: cutoff } } });
 
@@ -54,7 +39,16 @@ async function runCleanup() {
     data: { aiSummary: null },
   });
 
-  return { digestsDeleted: digestsDeleted.count, summariesCleared: summariesCleared.count, cutoff: cutoff.toISOString() };
+  // Enforce DB retention: delete items older than 7 days.
+  const itemsDeleted = await prisma.item.deleteMany({ where: { createdAt: { lt: itemsCutoff } } });
+
+  return {
+    digestsDeleted: digestsDeleted.count,
+    summariesCleared: summariesCleared.count,
+    itemsDeleted: itemsDeleted.count,
+    cutoff: cutoff.toISOString(),
+    itemsCutoff: itemsCutoff.toISOString(),
+  };
 }
 
 export async function POST(req: Request) {
