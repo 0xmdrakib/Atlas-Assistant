@@ -60,7 +60,17 @@ function normalizeTitleKey(t: string) {
 }
 
 function normalizeTopic(t: string) {
-  return t.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 40);
+  const n = t.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 40);
+  if (!n) return "";
+  // Canonicalize a few common aliases so category search stays predictable.
+  const ALIASES: Record<string, string> = {
+    opensource: "open-source",
+    "open-source": "open-source",
+    cyber: "cybersecurity",
+    security: "cybersecurity",
+    climate: "climate",
+  };
+  return ALIASES[n] || n;
 }
 
 const CATEGORY_RULES: Record<CanonicalSection, Array<{ code: string; keywords: string[] }>> = {
@@ -148,7 +158,8 @@ function extractTopics(section: CanonicalSection, title: string, snippet: string
   if (text.includes("culture") || text.includes("art")) add("culture");
   if (text.includes("science") || text.includes("research")) add("science");
 
-  return Array.from(out).slice(0, 10);
+  // Product rule: keep 1–2 searchable categories per item.
+  return Array.from(out).slice(0, 2);
 }
 
 function sectionQuery(section: CanonicalSection) {
@@ -372,11 +383,19 @@ export async function discoverOnce() {
     return { ok: true, added: 0, skipped: true, reason: "No AI provider keys configured" };
   }
 
+  // Product rules for AI tab (per section):
+  // - Run at most every 12 hours
+  // - Add at most 1 item per provider (GitHub/YouTube/X) per run => max 3/run
+  // - Hard caps: 6/day, 42/week, and keep only the most recent 7 days
+  const AI_RUN_INTERVAL_MS = 12 * 60 * 60 * 1000;
+  const AI_PER_RUN_CAP = 3;
+  const AI_DAILY_CAP = 6;
+  const AI_WEEKLY_CAP = 42;
+
   const sections = Object.keys(SECTION_POLICIES) as CanonicalSection[];
   const now = Date.now();
   const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
   const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
-  const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
   let added = 0;
   let skipped = 0;
@@ -398,15 +417,15 @@ export async function discoverOnce() {
     });
 
     // Run at most every 12h per section.
-    if (src.lastFetchedAt && now - new Date(src.lastFetchedAt).getTime() < 12 * 60 * 60 * 1000) {
+    if (src.lastFetchedAt && now - new Date(src.lastFetchedAt).getTime() < AI_RUN_INTERVAL_MS) {
       skipped += 1;
       skippedReasons.notDue += 1;
       continue;
     }
 
-    // Max 4 discovered items per day per section.
+    // Max 6 discovered items per day per section.
     const dailyCount = await prisma.item.count({ where: { sourceId: src.id, createdAt: { gte: dayAgo } } });
-    if (dailyCount >= 4) {
+    if (dailyCount >= AI_DAILY_CAP) {
       skipped += 1;
       skippedReasons.dailyCap += 1;
       continue;
@@ -458,17 +477,35 @@ export async function discoverOnce() {
       continue;
     }
 
-    // Pick top-scoring candidates. (No LLM selection here; AI tab sources are already constrained.)
-    const chosenIdx = [0, 1];
+    // Pick the highest-scoring candidate per provider, up to 3 total.
+    const remainingToday = Math.max(0, AI_DAILY_CAP - dailyCount);
+    const remainingThisRun = Math.min(AI_PER_RUN_CAP, remainingToday);
+    const providerKey = (name: string) => {
+      const n = String(name || "").trim();
+      if (!n) return "";
+      if (n.toLowerCase().startsWith("x ") || n.toLowerCase().startsWith("x@")) return "X";
+      if (n.toLowerCase().startsWith("github")) return "GitHub";
+      if (n.toLowerCase().startsWith("youtube")) return "YouTube";
+      return n;
+    };
 
-    const chosen = chosenIdx
-      .map((i) => candidates[i]?.c)
-      .filter(Boolean)
-      .slice(0, Math.min(2, 4 - dailyCount));
+    const picked: Candidate[] = [];
+    const usedProviders = new Set<string>();
+    for (const x of candidates) {
+      const p = providerKey(x.c.sourceName || "");
+      if (!p) continue;
+      if (usedProviders.has(p)) continue;
+      usedProviders.add(p);
+      picked.push(x.c);
+      if (picked.length >= remainingThisRun) break;
+    }
+
+    const chosen = picked;
 
     for (const c of chosen) {
       const topics = extractTopics(section, c.title, c.snippet);
       try {
+        const s = scoreCandidate(section, c);
         await prisma.item.upsert({
           where: { url: c.url },
           create: {
@@ -480,7 +517,7 @@ export async function discoverOnce() {
             url: c.url,
             country: null,
             topics,
-            score: scoreCandidate(section, c),
+            score: s,
             publishedAt: c.publishedAt,
           },
           update: {
@@ -489,7 +526,7 @@ export async function discoverOnce() {
             title: c.title,
             summary: c.snippet || c.title,
             topics,
-            score: scoreCandidate(section, c),
+            score: s,
             publishedAt: c.publishedAt,
             // Keep AI items visible in time-windowed feeds by treating
             // `createdAt` as "collectedAt".
@@ -511,7 +548,7 @@ export async function discoverOnce() {
       where: { section, createdAt: { gte: dayAgo }, source: { is: { type: "ai" } } },
       select: { id: true },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
-      take: policy.dailyCap,
+      take: AI_DAILY_CAP,
     });
 
     const dailyKeep = keepDaily.map((x) => x.id);
@@ -520,13 +557,13 @@ export async function discoverOnce() {
       where: { section, createdAt: { gte: weekAgo }, source: { is: { type: "ai" } } },
       select: { id: true },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
-      take: policy.weeklyCap,
+      take: AI_WEEKLY_CAP,
     });
 
     const keepWeek: string[] = [...dailyKeep];
     const keepWeekSet = new Set(keepWeek);
     for (const w of keepWeekly) {
-      if (keepWeek.length >= policy.weeklyCap) break;
+      if (keepWeek.length >= AI_WEEKLY_CAP) break;
       if (!keepWeekSet.has(w.id)) {
         keepWeek.push(w.id);
         keepWeekSet.add(w.id);
@@ -539,30 +576,8 @@ export async function discoverOnce() {
       });
     }
 
-    if (section === "history") {
-      const keepMonthly = await prisma.item.findMany({
-        where: { section, createdAt: { gte: monthAgo }, source: { is: { type: "ai" } } },
-        select: { id: true },
-        orderBy: [{ score: "desc" }, { createdAt: "desc" }],
-        take: policy.monthlyCap,
-      });
-
-      const keepMonth: string[] = [...keepWeek];
-      const keepMonthSet = new Set(keepMonth);
-      for (const m of keepMonthly) {
-        if (keepMonth.length >= policy.monthlyCap) break;
-        if (!keepMonthSet.has(m.id)) {
-          keepMonth.push(m.id);
-          keepMonthSet.add(m.id);
-        }
-      }
-
-      if (keepMonth.length) {
-        await prisma.item.deleteMany({
-          where: { section, createdAt: { gte: monthAgo }, source: { is: { type: "ai" } }, id: { notIn: keepMonth } },
-        });
-      }
-    }
+    // Retention: drop anything older than 7 days for AI items.
+    await prisma.item.deleteMany({ where: { section, createdAt: { lt: weekAgo }, source: { is: { type: "ai" } } } });
   }
 
   return { ok: true, added, skipped, stats: skippedReasons };
