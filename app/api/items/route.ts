@@ -28,6 +28,15 @@ function normalizeDays(daysRaw: number): number {
   return daysRaw === 1 || daysRaw === 7 ? daysRaw : 1;
 }
 
+function aiProviderName(url: string): string | null {
+  const u = String(url || "").toLowerCase();
+  if (!u) return null;
+  if (u.includes("youtube.com") || u.includes("youtu.be")) return "YouTube";
+  if (u.includes("github.com") || u.includes("github.blog")) return "GitHub";
+  if (u.includes("x.com") || u.includes("twitter.com")) return "X";
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const secRaw = String(searchParams.get("section") || "global").toLowerCase();
@@ -45,8 +54,15 @@ export async function GET(req: NextRequest) {
   // - This aligns feed ordering and retention with the UI.
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-  // AI tab should show nothing unless at least one of the 3 provider keys is configured.
-  const aiSearchEnabled = Boolean(process.env.X_BEARER_TOKEN || process.env.YOUTUBE_API_KEY || process.env.GITHUB_TOKEN);
+  // AI tab should show nothing unless at least one provider is configured.
+  const envKeys = Object.keys(process.env);
+  const hasGithubRss =
+    Boolean(process.env.GITHUB_RSS_URLS || process.env.GITHUB_RSS_URL) ||
+    envKeys.some((k) => k.startsWith("GITHUB_RSS_URLS_") || k.startsWith("GITHUB_RSS_URL_"));
+  const hasXRss =
+    Boolean(process.env.X_RSS_URLS || process.env.X_RSS_URL) ||
+    envKeys.some((k) => k.startsWith("X_RSS_URLS_") || k.startsWith("X_RSS_URL_"));
+  const aiSearchEnabled = Boolean(process.env.YOUTUBE_API_KEY || hasGithubRss || hasXRss);
 
   const where: any = { section, createdAt: { gte: since } };
 
@@ -148,7 +164,7 @@ export async function GET(req: NextRequest) {
         summary: translated[it.id]?.summary || it.summary,
         // AI summaries are cached per-language in ItemTranslation.
         aiSummary: tr?.aiSummary ?? undefined,
-        sourceName: it.source.name,
+        sourceName: kind === "ai" ? aiProviderName(it.url) || it.source.name : it.source.name,
         url: it.url,
         country: it.country ?? undefined,
         topics: it.topics,
