@@ -89,10 +89,11 @@
   },
   {
     "section": "global",
-    "name": "Google News - World",
-    "url": "https://news.google.com/rss?hl=en&gl=US&ceid=US:en",
+    "name": "Google News - Global",
     "type": "rss",
-    "trustScore": 80
+    "url": "https://news.google.com/rss/search?q=global+news+OR+world+news+OR+geopolitics+OR+election+OR+conflict&hl=en&gl=US&ceid=US:en",
+    "trustScore": 80,
+    "enabled": true
   },
   {
     "section": "global",
@@ -254,6 +255,14 @@
   },
   {
     "section": "tech",
+    "name": "Google News - Tech",
+    "type": "rss",
+    "url": "https://news.google.com/rss/search?q=technology+OR+AI+OR+cybersecurity+OR+programming+OR+developer+tools&hl=en&gl=US&ceid=US:en",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "tech",
     "name": "Hacker News (HN RSS)",
     "url": "https://hnrss.org/frontpage",
     "type": "rss",
@@ -376,6 +385,14 @@
     "url": "https://blog.google/technology/ai/rss/",
     "country": "US",
     "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "innovators",
+    "name": "Google News - Innovators",
+    "type": "rss",
+    "url": "https://news.google.com/rss/search?q=innovation+OR+startup+OR+robotics+OR+aerospace+OR+prototype&hl=en&gl=US&ceid=US:en",
+    "trustScore": 80,
     "enabled": true
   },
   {
@@ -613,6 +630,14 @@
   },
   {
     "section": "early",
+    "name": "Google News - Early",
+    "type": "rss",
+    "url": "https://news.google.com/rss/search?q=arxiv+OR+preprint+OR+patent+OR+emerging+research+OR+low+hype&hl=en&gl=US&ceid=US:en",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "early",
     "name": "Lobsters (Dev News)",
     "url": "https://lobste.rs/rss",
     "type": "rss",
@@ -710,6 +735,14 @@
     "type": "rss",
     "url": "https://www.fsf.org/news/rss",
     "country": "US",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "creators",
+    "name": "Google News - Creators",
+    "type": "rss",
+    "url": "https://news.google.com/rss/search?q=open+source+OR+tutorial+OR+design+OR+creator+OR+new+tool&hl=en&gl=US&ceid=US:en",
     "trustScore": 80,
     "enabled": true
   },
@@ -878,6 +911,14 @@
   },
   {
     "section": "universe",
+    "name": "Google News - Universe",
+    "type": "rss",
+    "url": "https://news.google.com/rss/search?q=space+OR+NASA+OR+telescope+OR+exoplanet+OR+astronomy&hl=en&gl=US&ceid=US:en",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "universe",
     "name": "HubbleSite",
     "type": "rss",
     "url": "https://hubblesite.org/feed/news",
@@ -982,6 +1023,14 @@
     "url": "https://blog.britishmuseum.org/feed/",
     "country": "GB",
     "trustScore": 82,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Google News - History",
+    "type": "rss",
+    "url": "https://news.google.com/rss/search?q=history+OR+archaeology+OR+islamic+history+OR+caliphate+OR+ottoman&hl=en&gl=US&ceid=US:en",
+    "trustScore": 80,
     "enabled": true
   },
   {
@@ -1117,6 +1166,14 @@
     "url": "https://aboutislam.net/feed/",
     "type": "rss",
     "trustScore": 70
+  },
+  {
+    "section": "faith",
+    "name": "Google News - Faith",
+    "type": "rss",
+    "url": "https://news.google.com/rss/search?q=islam+OR+quran+OR+hadith+OR+fiqh+OR+interfaith+OR+spirituality&hl=en&gl=US&ceid=US:en",
+    "trustScore": 80,
+    "enabled": true
   },
   {
     "section": "faith",
