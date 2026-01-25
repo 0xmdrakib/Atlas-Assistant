@@ -240,17 +240,35 @@
   {
     "section": "tech",
     "name": "Ars Technica",
-    "url": "https://feeds.arstechnica.com/arstechnica/index",
     "type": "rss",
-    "trustScore": 90
+    "url": "https://feeds.arstechnica.com/arstechnica/index",
+    "trustScore": 90,
+    "enabled": true
+  },
+  {
+    "section": "tech",
+    "name": "BleepingComputer",
+    "type": "rss",
+    "url": "https://www.bleepingcomputer.com/feed/",
+    "trustScore": 78,
+    "enabled": true
   },
   {
     "section": "tech",
     "name": "GitHub Blog",
-    "type": "atom",
+    "type": "rss",
     "url": "https://github.blog/feed/",
-    "country": "US",
     "trustScore": 85,
+    "country": "US",
+    "enabled": true
+  },
+  {
+    "section": "tech",
+    "name": "Google AI Blog",
+    "type": "rss",
+    "url": "https://blog.google/technology/ai/rss/",
+    "trustScore": 82,
+    "country": "US",
     "enabled": true
   },
   {
@@ -263,69 +281,84 @@
   },
   {
     "section": "tech",
-    "name": "Hacker News (HN RSS)",
-    "url": "https://hnrss.org/frontpage",
+    "name": "Google Security Blog",
     "type": "rss",
-    "trustScore": 70
+    "url": "https://security.googleblog.com/feeds/posts/default",
+    "trustScore": 85,
+    "country": "US",
+    "enabled": true
+  },
+  {
+    "section": "tech",
+    "name": "Hacker News (HN RSS)",
+    "type": "rss",
+    "url": "https://hnrss.org/frontpage",
+    "trustScore": 70,
+    "enabled": true
   },
   {
     "section": "tech",
     "name": "IEEE Spectrum",
-    "url": "https://spectrum.ieee.org/customfeeds/feed/all-topics/rss",
     "type": "rss",
-    "trustScore": 85
+    "url": "https://spectrum.ieee.org/customfeeds/feed/all-topics/rss",
+    "trustScore": 85,
+    "enabled": true
   },
   {
     "section": "tech",
     "name": "InfoQ",
-    "url": "https://feed.infoq.com/",
     "type": "rss",
-    "trustScore": 75
+    "url": "https://feed.infoq.com/",
+    "trustScore": 75,
+    "enabled": true
+  },
+  {
+    "section": "tech",
+    "name": "Krebs on Security",
+    "type": "rss",
+    "url": "https://krebsonsecurity.com/feed/",
+    "trustScore": 88,
+    "enabled": true
+  },
+  {
+    "section": "tech",
+    "name": "MIT Technology Review",
+    "type": "rss",
+    "url": "https://www.technologyreview.com/feed/",
+    "trustScore": 90,
+    "enabled": true
   },
   {
     "section": "tech",
     "name": "Schneier on Security",
+    "type": "rss",
     "url": "https://www.schneier.com/feed/atom/",
-    "type": "rss",
-    "trustScore": 85
-  },
-  {
-    "section": "tech",
-    "name": "TechCrunch",
-    "type": "rss",
-    "url": "https://techcrunch.com/feed/",
-    "country": "US",
-    "trustScore": 80,
+    "trustScore": 85,
     "enabled": true
   },
   {
     "section": "tech",
     "name": "The Hacker News",
-    "url": "https://feeds.feedburner.com/TheHackersNews",
     "type": "rss",
-    "trustScore": 75
+    "url": "https://feeds.feedburner.com/TheHackersNews",
+    "trustScore": 75,
+    "enabled": true
   },
   {
     "section": "tech",
     "name": "The Register (Headlines)",
+    "type": "rss",
     "url": "https://www.theregister.com/headlines.atom",
-    "type": "rss",
-    "trustScore": 75
-  },
-  {
-    "section": "tech",
-    "name": "The Verge",
-    "url": "https://www.theverge.com/rss/index.xml",
-    "type": "rss",
-    "trustScore": 78
+    "trustScore": 75,
+    "enabled": true
   },
   {
     "section": "tech",
     "name": "WIRED",
     "type": "rss",
     "url": "https://www.wired.com/feed/rss",
-    "country": "US",
     "trustScore": 85,
+    "country": "US",
     "enabled": true
   },
   {
@@ -377,15 +410,6 @@
     "url": "https://www.fastcompany.com/technology/feed",
     "type": "rss",
     "trustScore": 75
-  },
-  {
-    "section": "innovators",
-    "name": "Google AI Blog",
-    "type": "rss",
-    "url": "https://blog.google/technology/ai/rss/",
-    "country": "US",
-    "trustScore": 82,
-    "enabled": true
   },
   {
     "section": "innovators",
@@ -451,13 +475,6 @@
   },
   {
     "section": "innovators",
-    "name": "MIT Technology Review",
-    "url": "https://www.technologyreview.com/feed/",
-    "type": "rss",
-    "trustScore": 90
-  },
-  {
-    "section": "innovators",
     "name": "NVIDIA Blog",
     "type": "rss",
     "url": "https://blogs.nvidia.com/blog/feed/",
@@ -497,6 +514,15 @@
     "url": "https://ai.stanford.edu/blog/feed.xml",
     "country": "US",
     "trustScore": 86,
+    "enabled": true
+  },
+  {
+    "section": "early",
+    "name": "arXiv astro-ph",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/astro-ph",
+    "country": null,
+    "trustScore": 80,
     "enabled": true
   },
   {
@@ -560,6 +586,33 @@
     "type": "rss",
     "country": "INTL",
     "trustScore": 70,
+    "enabled": true
+  },
+  {
+    "section": "early",
+    "name": "arXiv hep-ph",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/hep-ph",
+    "country": null,
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "early",
+    "name": "arXiv physics.space-ph",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/physics.space-ph",
+    "country": null,
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "early",
+    "name": "arXiv quant-ph",
+    "type": "rss",
+    "url": "https://rss.arxiv.org/rss/quant-ph",
+    "country": null,
+    "trustScore": 80,
     "enabled": true
   },
   {
@@ -848,47 +901,11 @@
   },
   {
     "section": "universe",
-    "name": "arXiv astro-ph",
-    "type": "rss",
-    "url": "https://rss.arxiv.org/rss/astro-ph",
-    "country": null,
-    "trustScore": 85,
-    "enabled": true
-  },
-  {
-    "section": "universe",
-    "name": "arXiv hep-ph",
-    "type": "rss",
-    "url": "https://rss.arxiv.org/rss/hep-ph",
-    "country": null,
-    "trustScore": 83,
-    "enabled": true
-  },
-  {
-    "section": "universe",
-    "name": "arXiv physics.space-ph",
-    "type": "rss",
-    "url": "https://rss.arxiv.org/rss/physics.space-ph",
-    "country": null,
-    "trustScore": 85,
-    "enabled": true
-  },
-  {
-    "section": "universe",
-    "name": "arXiv quant-ph",
-    "type": "rss",
-    "url": "https://rss.arxiv.org/rss/quant-ph",
-    "country": null,
-    "trustScore": 83,
-    "enabled": true
-  },
-  {
-    "section": "universe",
     "name": "Chandra X-ray Observatory",
     "type": "rss",
     "url": "https://chandra.harvard.edu/rss/index.html",
-    "country": "US",
     "trustScore": 84,
+    "country": "US",
     "enabled": true
   },
   {
@@ -896,8 +913,8 @@
     "name": "ESA Science & Exploration",
     "type": "rss",
     "url": "https://www.esa.int/rssfeed/Our_Activities/Space_Science",
-    "country": "EU",
     "trustScore": 86,
+    "country": "EU",
     "enabled": true
   },
   {
@@ -905,8 +922,8 @@
     "name": "European Space Agency",
     "type": "rss",
     "url": "https://www.esa.int/rssfeed/TopNews",
-    "country": "EU",
     "trustScore": 90,
+    "country": "EU",
     "enabled": true
   },
   {
@@ -922,8 +939,8 @@
     "name": "HubbleSite",
     "type": "rss",
     "url": "https://hubblesite.org/feed/news",
-    "country": "US",
     "trustScore": 86,
+    "country": "US",
     "enabled": true
   },
   {
@@ -931,8 +948,8 @@
     "name": "JPL News",
     "type": "rss",
     "url": "https://www.jpl.nasa.gov/feed/",
-    "country": "US",
     "trustScore": 90,
+    "country": "US",
     "enabled": true
   },
   {
@@ -940,8 +957,8 @@
     "name": "NASA Earth Observatory",
     "type": "rss",
     "url": "https://earthobservatory.nasa.gov/feeds/rss.xml",
-    "country": "US",
     "trustScore": 90,
+    "country": "US",
     "enabled": true
   },
   {
@@ -949,8 +966,8 @@
     "name": "NASA Mars Exploration",
     "type": "rss",
     "url": "https://mars.nasa.gov/rss/blogs/",
-    "country": "US",
     "trustScore": 88,
+    "country": "US",
     "enabled": true
   },
   {
@@ -958,8 +975,8 @@
     "name": "NASA News Releases",
     "type": "rss",
     "url": "https://www.nasa.gov/rss/dyn/breaking_news.rss",
-    "country": "US",
     "trustScore": 95,
+    "country": "US",
     "enabled": true
   },
   {
@@ -967,8 +984,8 @@
     "name": "NASA Science",
     "type": "rss",
     "url": "https://science.nasa.gov/feed/",
-    "country": "US",
     "trustScore": 90,
+    "country": "US",
     "enabled": true
   },
   {
@@ -976,8 +993,8 @@
     "name": "SETI Institute",
     "type": "rss",
     "url": "https://www.seti.org/rss.xml",
-    "country": "US",
     "trustScore": 80,
+    "country": "US",
     "enabled": true
   },
   {
@@ -985,8 +1002,8 @@
     "name": "Sky & Telescope",
     "type": "rss",
     "url": "https://skyandtelescope.org/feed/",
-    "country": "US",
     "trustScore": 80,
+    "country": "US",
     "enabled": true
   },
   {
@@ -994,8 +1011,26 @@
     "name": "Space.com",
     "type": "rss",
     "url": "https://www.space.com/feeds/all",
-    "country": "US",
     "trustScore": 85,
+    "country": "US",
+    "enabled": true
+  },
+  {
+    "section": "universe",
+    "name": "SpaceNews",
+    "type": "rss",
+    "url": "https://spacenews.com/feed/",
+    "trustScore": 82,
+    "country": "US",
+    "enabled": true
+  },
+  {
+    "section": "universe",
+    "name": "Spaceflight Now",
+    "type": "rss",
+    "url": "https://spaceflightnow.com/feed/",
+    "trustScore": 78,
+    "country": "US",
     "enabled": true
   },
   {
@@ -1003,17 +1038,26 @@
     "name": "Universe Today",
     "type": "rss",
     "url": "https://www.universetoday.com/feed/",
-    "country": "US",
     "trustScore": 80,
+    "country": "US",
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Archaeology Magazine",
+    "type": "rss",
+    "url": "https://www.archaeology.org/rss/xml",
+    "trustScore": 82,
+    "country": "US",
     "enabled": true
   },
   {
     "section": "history",
     "name": "British Library - Asian and African Studies",
-    "url": "https://blogs.bl.uk/asian-and-african/rss.xml",
     "type": "rss",
-    "country": "UK",
+    "url": "https://blogs.bl.uk/asian-and-african/rss.xml",
     "trustScore": 80,
+    "country": "UK",
     "enabled": true
   },
   {
@@ -1021,8 +1065,8 @@
     "name": "British Museum",
     "type": "rss",
     "url": "https://blog.britishmuseum.org/feed/",
-    "country": "GB",
     "trustScore": 82,
+    "country": "GB",
     "enabled": true
   },
   {
@@ -1036,26 +1080,27 @@
   {
     "section": "history",
     "name": "Harvard Islamic Studies (OS RSS)",
-    "url": "https://islamicstudies.harvard.edu/rss.xml?term=175863",
     "type": "rss",
-    "country": "US",
+    "url": "https://islamicstudies.harvard.edu/rss.xml?term=175863",
     "trustScore": 85,
+    "country": "US",
     "enabled": true
   },
   {
     "section": "history",
     "name": "History News Network",
-    "url": "https://historynewsnetwork.org/rss.xml",
     "type": "rss",
-    "trustScore": 85
+    "url": "https://historynewsnetwork.org/rss.xml",
+    "trustScore": 85,
+    "enabled": true
   },
   {
     "section": "history",
     "name": "History Today",
     "type": "rss",
     "url": "https://www.historytoday.com/feed/rss.xml",
-    "country": "GB",
     "trustScore": 85,
+    "country": "GB",
     "enabled": true
   },
   {
@@ -1063,8 +1108,8 @@
     "name": "Khan Academy - World History",
     "type": "rss",
     "url": "https://blog.khanacademy.org/category/world-history/feed/",
-    "country": "US",
     "trustScore": 75,
+    "country": "US",
     "enabled": true
   },
   {
@@ -1072,51 +1117,43 @@
     "name": "Library of Congress",
     "type": "rss",
     "url": "https://blogs.loc.gov/feed/",
-    "country": "US",
     "trustScore": 82,
+    "country": "US",
     "enabled": true
   },
   {
     "section": "history",
     "name": "Medievalists.net",
-    "url": "https://www.medievalists.net/feed/",
     "type": "rss",
-    "trustScore": 80
+    "url": "https://www.medievalists.net/feed/",
+    "trustScore": 80,
+    "enabled": true
   },
   {
     "section": "history",
     "name": "Met Museum",
     "type": "rss",
     "url": "https://www.metmuseum.org/rss/articles",
-    "country": "US",
     "trustScore": 80,
+    "country": "US",
     "enabled": true
   },
   {
     "section": "history",
     "name": "Met Museum - The Met",
+    "type": "rss",
     "url": "https://www.metmuseum.org/blogs/rss",
-    "type": "rss",
-    "country": "US",
     "trustScore": 80,
-    "enabled": true
-  },
-  {
-    "section": "history",
-    "name": "MuslimMatters",
-    "type": "rss",
-    "url": "https://muslimmatters.org/feed/",
     "country": "US",
-    "trustScore": 80,
     "enabled": true
   },
   {
     "section": "history",
     "name": "Qatar Digital Library - Articles",
-    "url": "https://www.qdl.qa/en/rss.xml",
     "type": "rss",
-    "country": "QA",
+    "url": "https://www.qdl.qa/en/rss.xml",
     "trustScore": 80,
+    "country": "QA",
     "enabled": true
   },
   {
@@ -1124,127 +1161,92 @@
     "name": "Smithsonian History",
     "type": "rss",
     "url": "https://www.smithsonianmag.com/history/feed/",
-    "country": "US",
     "trustScore": 82,
+    "country": "US",
     "enabled": true
   },
   {
     "section": "history",
     "name": "Smithsonian Magazine - History",
-    "url": "https://www.smithsonianmag.com/category/history/feed/",
     "type": "rss",
-    "trustScore": 90
+    "url": "https://www.smithsonianmag.com/category/history/feed/",
+    "trustScore": 90,
+    "enabled": true
   },
   {
     "section": "history",
     "name": "The Conversation History UK",
     "type": "rss",
     "url": "https://theconversation.com/uk/history/feed",
-    "country": "GB",
     "trustScore": 82,
+    "country": "GB",
     "enabled": true
   },
   {
     "section": "history",
-    "name": "The Muslim History Channel",
-    "url": "https://media.rss.com/themuslimhistorychannel/feed.xml",
+    "name": "The National Archives (UK)",
     "type": "rss",
-    "country": "INTL",
-    "trustScore": 60,
+    "url": "https://blog.nationalarchives.gov.uk/feed/",
+    "trustScore": 82,
+    "country": "GB",
     "enabled": true
-  },
-  {
-    "section": "history",
-    "name": "The Review of Religions",
-    "url": "https://reviewofreligions.org/feed/",
-    "type": "rss",
-    "trustScore": 75
   },
   {
     "section": "faith",
     "name": "About Islam",
-    "url": "https://aboutislam.net/feed/",
     "type": "rss",
-    "trustScore": 70
+    "url": "https://aboutislam.net/feed/",
+    "trustScore": 70,
+    "enabled": true
   },
   {
     "section": "faith",
-    "name": "Google News - Faith",
+    "name": "MuslimMatters",
     "type": "rss",
-    "url": "https://news.google.com/rss/search?q=islam+OR+quran+OR+hadith+OR+fiqh+OR+interfaith+OR+spirituality&hl=en&gl=US&ceid=US:en",
+    "url": "https://muslimmatters.org/feed/",
+    "trustScore": 82,
+    "country": "US",
+    "enabled": true
+  },
+  {
+    "section": "faith",
+    "name": "Productive Muslim",
+    "type": "rss",
+    "url": "https://productivemuslim.com/feed/",
     "trustScore": 80,
     "enabled": true
   },
   {
     "section": "faith",
-    "name": "Pew Research Center",
-    "url": "https://www.pewresearch.org/feed/",
-    "type": "rss",
-    "trustScore": 85
-  },
-  {
-    "section": "faith",
-    "name": "Productive Muslim",
-    "url": "https://productivemuslim.com/feed/",
-    "type": "rss",
-    "trustScore": 80
-  },
-  {
-    "section": "faith",
     "name": "Quran.com Blog",
+    "type": "rss",
     "url": "https://quran.com/blog/rss.xml",
-    "type": "rss",
-    "trustScore": 78
-  },
-  {
-    "section": "faith",
-    "name": "Religion News Service",
-    "url": "https://religionnews.com/feed/",
-    "type": "rss",
-    "trustScore": 75
+    "trustScore": 78,
+    "enabled": true
   },
   {
     "section": "faith",
     "name": "SeekersGuidance",
-    "url": "https://seekersguidance.org/seekersguidance-feed/",
     "type": "rss",
-    "trustScore": 78
-  },
-  {
-    "section": "faith",
-    "name": "SeekersGuidance",
     "url": "https://seekersguidance.org/feed/",
-    "type": "rss",
-    "trustScore": 85
-  },
-  {
-    "section": "faith",
-    "name": "Sojourners (Faith & Justice)",
-    "url": "https://sojo.net/rss.xml",
-    "type": "rss",
-    "trustScore": 80
+    "trustScore": 85,
+    "enabled": true
   },
   {
     "section": "faith",
     "name": "The Muslim Vibe",
+    "type": "rss",
     "url": "https://themuslimvibe.com/feed",
-    "type": "rss",
-    "trustScore": 75
-  },
-  {
-    "section": "faith",
-    "name": "Vatican News (English)",
-    "url": "https://www.vaticannews.va/en.rss.xml",
-    "type": "rss",
-    "trustScore": 75
+    "trustScore": 75,
+    "enabled": true
   },
   {
     "section": "faith",
     "name": "Yaqeen Institute",
     "type": "rss",
     "url": "https://yaqeeninstitute.org/feed/",
-    "country": "US",
     "trustScore": 90,
+    "country": "US",
     "enabled": true
   }
 ]
