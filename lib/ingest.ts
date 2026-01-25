@@ -625,6 +625,7 @@ export async function ingestOnce() {
   }
 
   async function googleNewsCandidates(section: CanonicalSection) {
+    if (section === "faith") return [];
     // A pragmatic fallback: Google News RSS is resilient when publisher RSS endpoints
     // are blocked or unavailable from serverless environments.
     const queryMap: Record<CanonicalSection, string> = {
