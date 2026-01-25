@@ -37,6 +37,15 @@ function normalizeDays(daysRaw: number): number {
   return daysRaw === 1 || daysRaw === 7 ? daysRaw : 1;
 }
 
+function aiProviderName(url: string): string | null {
+  const u = String(url || "").toLowerCase();
+  if (!u) return null;
+  if (u.includes("youtube.com") || u.includes("youtu.be")) return "YouTube";
+  if (u.includes("github.com") || u.includes("github.blog")) return "GitHub";
+  if (u.includes("x.com") || u.includes("twitter.com")) return "X";
+  return null;
+}
+
 function digestCacheKey(
   section: string,
   kind: Kind,
@@ -127,7 +136,11 @@ export async function POST(req: Request) {
     country,
     topic,
     lang,
-    items: items.map((it) => ({ title: it.title, sourceName: it.source.name, url: it.url })),
+    items: items.map((it) => ({
+      title: it.title,
+      sourceName: kind === "ai" ? aiProviderName(it.url) || it.source.name : it.source.name,
+      url: it.url,
+    })),
   });
 
   let parsed: any;
