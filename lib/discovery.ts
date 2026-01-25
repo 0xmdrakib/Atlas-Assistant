@@ -285,6 +285,44 @@ const AI_SECTION_KEYWORDS: Record<CanonicalSection, string[]> = {
   ],
 };
 
+const YOUTUBE_CATEGORY_ID: Record<CanonicalSection, string> = {
+  global: "25", // News & Politics
+  tech: "28", // Science & Technology
+  innovators: "28",
+  early: "28",
+  creators: "27", // Education
+  universe: "28",
+  history: "27",
+  faith: "27",
+};
+
+const YOUTUBE_MIN_DURATION_SEC: Record<CanonicalSection, number> = {
+  global: 180,
+  tech: 240,
+  innovators: 240,
+  early: 180,
+  creators: 240,
+  universe: 300,
+  history: 300,
+  faith: 300,
+};
+
+function matchesKeywords(section: CanonicalSection, text: string): boolean {
+  const keywords = AI_SECTION_KEYWORDS[section] || [];
+  if (!keywords.length) return true;
+  const t = text.toLowerCase();
+  return keywords.some((k) => t.includes(k.toLowerCase()));
+}
+
+function parseIsoDuration(iso: string): number {
+  const m = String(iso || "").match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  const h = Number(m[1] || 0);
+  const min = Number(m[2] || 0);
+  const s = Number(m[3] || 0);
+  return h * 3600 + min * 60 + s;
+}
+
 function extractTopics(section: CanonicalSection, title: string, snippet: string, categories?: string[]) {
   const out = new Set<string>();
   const text = `${title} ${snippet}`.toLowerCase();
@@ -385,46 +423,122 @@ async function fetchGdelt(section: CanonicalSection): Promise<Candidate[]> {
     .slice(0, 12);
 }
 
-async function fetchGithub(q: string): Promise<Candidate[]> {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) return [];
+async function fetchGithubBlog(section: CanonicalSection): Promise<Candidate[]> {
+  try {
+    const xml = await fetchText("https://github.blog/feed/", 12_000);
+    const feed: any = await parser.parseString(xml);
+    const items = (feed?.items || []) as FeedItem[];
 
-  const query = encodeURIComponent(`${q} in:name,description sort:updated-desc`);
-  const url = `https://api.github.com/search/repositories?q=${query}&per_page=10`;
-  const res = await fetch(url, {
-    headers: {
-      accept: "application/vnd.github+json",
-      authorization: `Bearer ${token}`,
-      "user-agent": "AtlasAssistant/1.1 (+ai)",
-    },
-  }).catch(() => null);
-
-  if (!res || !res.ok) return [];
-  const data: any = await res.json().catch(() => null);
-  const items: any[] = data?.items || [];
-
-  return items
-    .map((r) => {
-      const d = r?.updated_at ? new Date(r.updated_at) : new Date();
-      return {
-        title: String(r?.full_name || r?.name || "").trim(),
-        url: normalizeUrl(String(r?.html_url || "")),
-        snippet: String(r?.description || "").replace(/\s+/g, " ").trim().slice(0, 400),
-        publishedAt: isNaN(d.getTime()) ? new Date() : d,
-        sourceName: "GitHub",
-        baseTrust: 0.7,
-      };
-    })
-    .filter((c) => c.title && c.url)
-    .slice(0, 6);
+    return items
+      .map((it) => {
+        const publishedAt = new Date(it.isoDate || it.pubDate || Date.now());
+        const title = String(it.title || "").trim();
+        const snippet = String(it.contentSnippet || it.content || "").replace(/\s+/g, " ").trim().slice(0, 400);
+        const url = normalizeUrl(String((it as any).link || ""));
+        return {
+          title,
+          url,
+          snippet,
+          publishedAt: isNaN(publishedAt.getTime()) ? new Date() : publishedAt,
+          sourceName: "GitHub Blog",
+          baseTrust: 0.68,
+        };
+      })
+      .filter((c) => c.title && c.url && matchesKeywords(section, `${c.title} ${c.snippet}`))
+      .slice(0, 6);
+  } catch {
+    return [];
+  }
 }
 
-async function fetchYouTube(q: string): Promise<Candidate[]> {
+async function fetchGithub(section: CanonicalSection, q: string): Promise<Candidate[]> {
+  const token = process.env.GITHUB_TOKEN;
+  const out: Candidate[] = [];
+  let apiFailed = false;
+
+  if (token) {
+    const query = encodeURIComponent(`${q} in:name,description sort:updated-desc`);
+    const url = `https://api.github.com/search/repositories?q=${query}&per_page=10`;
+    const res = await fetch(url, {
+      headers: {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${token}`,
+        "user-agent": "AtlasAssistant/1.1 (+ai)",
+      },
+    }).catch(() => null);
+
+    if (!res || !res.ok) {
+      apiFailed = true;
+    } else {
+      const data: any = await res.json().catch(() => null);
+      const items: any[] = data?.items || [];
+
+      out.push(
+        ...items
+          .map((r) => {
+            const d = r?.updated_at ? new Date(r.updated_at) : new Date();
+            const title = String(r?.full_name || r?.name || "").trim();
+            const snippet = String(r?.description || "").replace(/\s+/g, " ").trim().slice(0, 400);
+            if (!matchesKeywords(section, `${title} ${snippet}`)) return null;
+            return {
+              title,
+              url: normalizeUrl(String(r?.html_url || "")),
+              snippet,
+              publishedAt: isNaN(d.getTime()) ? new Date() : d,
+              sourceName: "GitHub",
+              baseTrust: 0.7,
+            };
+          })
+          .filter((c): c is Candidate => Boolean(c))
+      );
+    }
+  }
+
+  if (!token || apiFailed || out.length === 0) {
+    out.push(...(await fetchGithubBlog(section)));
+  }
+
+  const seen = new Set<string>();
+  const dedup = out.filter((c) => {
+    if (!c.title || !c.url) return false;
+    if (seen.has(c.url)) return false;
+    seen.add(c.url);
+    return true;
+  });
+
+  return dedup.slice(0, 6);
+}
+
+async function fetchYouTube(section: CanonicalSection, q: string): Promise<Candidate[]> {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) return [];
 
-  const query = encodeURIComponent(q);
-  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&order=date&q=${query}&key=${key}`;
+  const query = `${q} -shorts -short -reel -tiktok`;
+  const params = new URLSearchParams({
+    part: "snippet",
+    type: "video",
+    maxResults: "12",
+    order: "relevance",
+    q: query,
+    key,
+    videoEmbeddable: "true",
+    videoSyndicated: "true",
+    safeSearch: "moderate",
+  });
+
+  const category = YOUTUBE_CATEGORY_ID[section];
+  if (category) params.set("videoCategoryId", category);
+
+  const publishedDays = clamp(Number(process.env.YOUTUBE_PUBLISHED_DAYS || 60), 7, 180);
+  const publishedAfter = new Date(Date.now() - publishedDays * 24 * 60 * 60 * 1000).toISOString();
+  params.set("publishedAfter", publishedAfter);
+
+  const relevanceLanguage = String(process.env.YOUTUBE_RELEVANCE_LANGUAGE || "en").trim();
+  if (relevanceLanguage) params.set("relevanceLanguage", relevanceLanguage);
+  const regionCode = String(process.env.YOUTUBE_REGION_CODE || "US").trim();
+  if (regionCode) params.set("regionCode", regionCode);
+
+  const url = `https://www.googleapis.com/youtube/v3/search?${params.toString()}`;
   const referer = resolveReferer();
   const headers: Record<string, string> = { "user-agent": "AtlasAssistant/1.1 (+ai)" };
   if (referer) {
@@ -438,21 +552,51 @@ async function fetchYouTube(q: string): Promise<Candidate[]> {
   const data: any = await res.json().catch(() => null);
   const items: any[] = data?.items || [];
 
+  const ids = items.map((it) => String(it?.id?.videoId || "")).filter(Boolean);
+  if (ids.length === 0) return [];
+
+  const detailsParams = new URLSearchParams({
+    part: "contentDetails,statistics,snippet",
+    id: ids.join(","),
+    key,
+  });
+  const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?${detailsParams.toString()}`;
+  const detailsRes = await fetch(detailsUrl, { headers }).catch(() => null);
+  const detailsJson: any = detailsRes && detailsRes.ok ? await detailsRes.json().catch(() => null) : null;
+  const detailItems: any[] = detailsJson?.items || [];
+  const detailMap = new Map<string, any>();
+  for (const it of detailItems) {
+    if (it?.id) detailMap.set(String(it.id), it);
+  }
+
+  const minDuration = YOUTUBE_MIN_DURATION_SEC[section] ?? 180;
+
   return items
     .map((it) => {
-      const id = it?.id?.videoId ? String(it.id.videoId) : "";
-      const sn = it?.snippet || {};
+      const id = String(it?.id?.videoId || "");
+      if (!id) return null;
+      const detail = detailMap.get(id);
+      const sn = detail?.snippet || it?.snippet || {};
+      const title = String(sn?.title || "").trim();
+      const snippet = String(sn?.description || "").replace(/\s+/g, " ").trim().slice(0, 400);
       const d = sn?.publishedAt ? new Date(sn.publishedAt) : new Date();
+      const durationSec = parseIsoDuration(detail?.contentDetails?.duration || "");
+      const text = `${title} ${snippet}`.toLowerCase();
+
+      if (durationSec && durationSec < minDuration) return null;
+      if (text.includes("#shorts") || text.includes("shorts")) return null;
+      if (!matchesKeywords(section, text)) return null;
+
       return {
-        title: String(sn?.title || "").trim(),
-        url: normalizeUrl(id ? `https://www.youtube.com/watch?v=${id}` : ""),
-        snippet: String(sn?.description || "").replace(/\s+/g, " ").trim().slice(0, 400),
+        title,
+        url: normalizeUrl(`https://www.youtube.com/watch?v=${id}`),
+        snippet,
         publishedAt: isNaN(d.getTime()) ? new Date() : d,
         sourceName: "YouTube",
-        baseTrust: 0.55,
+        baseTrust: durationSec >= minDuration + 300 ? 0.65 : 0.6,
       };
     })
-    .filter((c) => c.title && c.url)
+    .filter((c): c is Candidate => Boolean(c && c.title && c.url))
     .slice(0, 6);
 }
 
@@ -574,8 +718,8 @@ export async function discoverOnce() {
 
     const providerLists = await Promise.allSettled([
       // AI tab allows only these three providers.
-      fetchGithub(q),
-      fetchYouTube(q),
+      fetchGithub(section, q),
+      fetchYouTube(section, q),
       fetchX(q),
     ]);
 
