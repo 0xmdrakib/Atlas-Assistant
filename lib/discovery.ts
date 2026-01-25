@@ -151,6 +151,140 @@ const ALLOWED_TOPIC_CODES = new Set<string>(
     .concat(["climate", "culture", "science", "education"]) // small global set
 );
 
+const AI_SECTION_KEYWORDS: Record<CanonicalSection, string[]> = {
+  global: [
+    "global news",
+    "world news",
+    "geopolitics",
+    "diplomacy",
+    "election",
+    "conflict",
+    "sanctions",
+    "summit",
+    "economy",
+    "inflation",
+    "trade",
+    "markets",
+    "climate",
+    "energy",
+    "public health",
+    "policy",
+  ],
+  tech: [
+    "ai",
+    "machine learning",
+    "llm",
+    "openai",
+    "gemini",
+    "programming",
+    "software",
+    "developer",
+    "cybersecurity",
+    "breach",
+    "ransomware",
+    "cloud",
+    "kubernetes",
+    "open source",
+    "devtools",
+    "semiconductor",
+  ],
+  innovators: [
+    "innovation",
+    "startup",
+    "funding",
+    "prototype",
+    "robotics",
+    "autonomous",
+    "aerospace",
+    "biotech",
+    "hardware",
+    "manufacturing",
+    "climate tech",
+    "battery",
+    "hydrogen",
+    "drone",
+    "supply chain",
+  ],
+  early: [
+    "early signal",
+    "preprint",
+    "arxiv",
+    "patent",
+    "filing",
+    "benchmark",
+    "dataset",
+    "standard",
+    "rfc",
+    "emerging",
+    "under the radar",
+    "low hype",
+    "research note",
+    "prototype",
+  ],
+  creators: [
+    "creator",
+    "open source",
+    "release",
+    "library",
+    "tool",
+    "tutorial",
+    "guide",
+    "course",
+    "design",
+    "ux",
+    "writing",
+    "newsletter",
+    "podcast",
+    "video",
+    "community",
+  ],
+  universe: [
+    "space",
+    "nasa",
+    "esa",
+    "telescope",
+    "jwst",
+    "exoplanet",
+    "galaxy",
+    "astronomy",
+    "cosmology",
+    "rocket",
+    "launch",
+    "mars",
+    "physics",
+    "planetary",
+  ],
+  history: [
+    "history",
+    "islamic history",
+    "caliphate",
+    "ottoman",
+    "andalus",
+    "abbasid",
+    "umayyad",
+    "archaeology",
+    "ancient",
+    "heritage",
+    "museum",
+    "manuscript",
+    "civilization",
+  ],
+  faith: [
+    "islam",
+    "quran",
+    "hadith",
+    "fiqh",
+    "sunnah",
+    "spirituality",
+    "ethics",
+    "interfaith",
+    "dua",
+    "dhikr",
+    "faith",
+    "religion",
+  ],
+};
+
 function extractTopics(section: CanonicalSection, title: string, snippet: string, categories?: string[]) {
   const out = new Set<string>();
   const text = `${title} ${snippet}`.toLowerCase();
@@ -178,27 +312,10 @@ function extractTopics(section: CanonicalSection, title: string, snippet: string
 }
 
 function sectionQuery(section: CanonicalSection) {
-  // Short, targeted queries per section; used across multiple providers.
-  switch (section) {
-    case "global":
-      return "global news OR conflict OR election OR economy";
-    case "tech":
-      return "technology news OR cybersecurity OR AI OR semiconductor";
-    case "innovators":
-      return "startup robotics aerospace funding prototype";
-    case "early":
-      return "patent filing OR arXiv preprint OR new benchmark";
-    case "creators":
-      return "open source release OR tutorial OR new library";
-    case "universe":
-      return "NASA telescope exoplanet new discovery";
-    case "history":
-      return "islamic history AND (ottoman OR andalus OR caliphate)";
-    case "faith":
-      return "quran hadith fiqh islam";
-    default:
-      return "news";
-  }
+  const keywords = AI_SECTION_KEYWORDS[section] || [];
+  const unique = Array.from(new Set(keywords.map((k) => k.trim()).filter(Boolean)));
+  if (!unique.length) return "news";
+  return unique.slice(0, 14).join(" OR ");
 }
 
 async function fetchText(url: string, timeoutMs = 12000) {
