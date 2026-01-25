@@ -64,6 +64,25 @@ function normalizeUrl(raw: string) {
   return u.replace(/([?&](utm_[^=]+|mc_cid|mc_eid)=[^&]+)/gi, "").replace(/[?&]$/, "");
 }
 
+function envList(name: string): string[] {
+  const raw = String(process.env[name] || "").trim();
+  if (!raw) return [];
+  return raw
+    .split(/[,;\n]+/g)
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+function rssUrlsForProvider(provider: "X" | "GITHUB", section: CanonicalSection): string[] {
+  const upper = section.toUpperCase();
+  return [
+    ...envList(`${provider}_RSS_URLS_${upper}`),
+    ...envList(`${provider}_RSS_URL_${upper}`),
+    ...envList(`${provider}_RSS_URLS`),
+    ...envList(`${provider}_RSS_URL`),
+  ];
+}
+
 function normalizeTitleKey(t: string) {
   return String(t || "")
     .toLowerCase()
@@ -275,6 +294,10 @@ const AI_SECTION_KEYWORDS: Record<CanonicalSection, string[]> = {
     "hadith",
     "fiqh",
     "sunnah",
+    "tafsir",
+    "sirah",
+    "seerah",
+    "aqidah",
     "spirituality",
     "ethics",
     "interfaith",
@@ -284,6 +307,20 @@ const AI_SECTION_KEYWORDS: Record<CanonicalSection, string[]> = {
     "religion",
   ],
 };
+
+const YOUTUBE_QUERY_HINTS: Record<CanonicalSection, string[]> = {
+  global: ["analysis", "documentary", "explained", "interview"],
+  tech: ["deep dive", "engineering", "benchmark", "research"],
+  innovators: ["prototype", "demo", "case study", "engineering"],
+  early: ["paper", "preprint", "research", "conference"],
+  creators: ["tutorial", "course", "workshop", "build"],
+  universe: ["documentary", "lecture", "mission", "science"],
+  history: ["documentary", "lecture", "archaeology", "manuscript"],
+  faith: ["lecture", "tafsir", "sirah", "hadith"],
+};
+
+const YOUTUBE_NEGATIVE_QUERY =
+  "-shorts -short -reel -reels -tiktok -clip -clips -compilation -reaction -trailer -gameplay -meme -edit -status";
 
 const YOUTUBE_CATEGORY_ID: Record<CanonicalSection, string> = {
   global: "25", // News & Politics
@@ -306,6 +343,41 @@ const YOUTUBE_MIN_DURATION_SEC: Record<CanonicalSection, number> = {
   history: 300,
   faith: 300,
 };
+
+const YOUTUBE_DURATION_FILTER: Record<CanonicalSection, "medium" | "long"> = {
+  global: "medium",
+  tech: "medium",
+  innovators: "medium",
+  early: "medium",
+  creators: "medium",
+  universe: "long",
+  history: "long",
+  faith: "long",
+};
+
+const YOUTUBE_LOW_QUALITY_MARKERS = [
+  "shorts",
+  "short",
+  "reel",
+  "reels",
+  "clip",
+  "clips",
+  "reaction",
+  "prank",
+  "tiktok",
+  "meme",
+  "compilation",
+  "trailer",
+  "gameplay",
+  "highlights",
+  "edit",
+  "status",
+];
+
+function parseNumber(raw: unknown): number {
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
 
 function matchesKeywords(section: CanonicalSection, text: string): boolean {
   const keywords = AI_SECTION_KEYWORDS[section] || [];
@@ -356,6 +428,13 @@ function sectionQuery(section: CanonicalSection) {
   return unique.slice(0, 14).join(" OR ");
 }
 
+function youtubeQuery(section: CanonicalSection) {
+  const base = AI_SECTION_KEYWORDS[section] || [];
+  const hints = YOUTUBE_QUERY_HINTS[section] || [];
+  const parts = Array.from(new Set([...base.slice(0, 6), ...hints].map((k) => k.trim()).filter(Boolean)));
+  return parts.length ? parts.join(" ") : "news";
+}
+
 async function fetchText(url: string, timeoutMs = 12000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -372,6 +451,62 @@ async function fetchText(url: string, timeoutMs = 12000) {
   } finally {
     clearTimeout(t);
   }
+}
+
+async function fetchRssCandidates(args: {
+  url: string;
+  sourceName: string;
+  baseTrust: number;
+  section: CanonicalSection;
+}): Promise<Candidate[]> {
+  try {
+    const xml = await fetchText(args.url, 12_000);
+    const feed: any = await parser.parseString(xml);
+    const items = (feed?.items || []) as FeedItem[];
+
+    return items
+      .map((it) => {
+        const publishedAt = new Date(it.isoDate || it.pubDate || Date.now());
+        const title = String(it.title || "").trim();
+        const snippet = String(it.contentSnippet || it.content || "").replace(/\s+/g, " ").trim().slice(0, 400);
+        const url = normalizeUrl(String((it as any).link || (it as any).guid || ""));
+        const text = `${title} ${snippet}`.toLowerCase();
+        if (!matchesKeywords(args.section, text)) return null;
+        return {
+          title,
+          url,
+          snippet,
+          publishedAt: isNaN(publishedAt.getTime()) ? new Date() : publishedAt,
+          sourceName: args.sourceName,
+          baseTrust: args.baseTrust,
+        };
+      })
+      .filter((c): c is Candidate => Boolean(c && c.title && c.url))
+      .slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchRssCandidatesFromUrls(args: {
+  urls: string[];
+  sourceName: string;
+  baseTrust: number;
+  section: CanonicalSection;
+}): Promise<Candidate[]> {
+  const all: Candidate[] = [];
+  for (const url of args.urls) {
+    const rows = await fetchRssCandidates({ url, sourceName: args.sourceName, baseTrust: args.baseTrust, section: args.section });
+    all.push(...rows);
+  }
+
+  const seen = new Set<string>();
+  return all.filter((c) => {
+    if (!c.url || !c.title) return false;
+    if (seen.has(c.url)) return false;
+    seen.add(c.url);
+    return true;
+  });
 }
 
 async function fetchGoogleNewsRss(q: string): Promise<Candidate[]> {
@@ -423,102 +558,36 @@ async function fetchGdelt(section: CanonicalSection): Promise<Candidate[]> {
     .slice(0, 12);
 }
 
-async function fetchGithubBlog(section: CanonicalSection): Promise<Candidate[]> {
-  try {
-    const xml = await fetchText("https://github.blog/feed/", 12_000);
-    const feed: any = await parser.parseString(xml);
-    const items = (feed?.items || []) as FeedItem[];
+async function fetchGithub(section: CanonicalSection, _q: string): Promise<Candidate[]> {
+  const urls = rssUrlsForProvider("GITHUB", section);
 
-    return items
-      .map((it) => {
-        const publishedAt = new Date(it.isoDate || it.pubDate || Date.now());
-        const title = String(it.title || "").trim();
-        const snippet = String(it.contentSnippet || it.content || "").replace(/\s+/g, " ").trim().slice(0, 400);
-        const url = normalizeUrl(String((it as any).link || ""));
-        return {
-          title,
-          url,
-          snippet,
-          publishedAt: isNaN(publishedAt.getTime()) ? new Date() : publishedAt,
-          sourceName: "GitHub Blog",
-          baseTrust: 0.68,
-        };
-      })
-      .filter((c) => c.title && c.url && matchesKeywords(section, `${c.title} ${c.snippet}`))
-      .slice(0, 6);
-  } catch {
-    return [];
-  }
-}
-
-async function fetchGithub(section: CanonicalSection, q: string): Promise<Candidate[]> {
-  const token = process.env.GITHUB_TOKEN;
-  const out: Candidate[] = [];
-  let apiFailed = false;
-
-  if (token) {
-    const query = encodeURIComponent(`${q} in:name,description sort:updated-desc`);
-    const url = `https://api.github.com/search/repositories?q=${query}&per_page=10`;
-    const res = await fetch(url, {
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${token}`,
-        "user-agent": "AtlasAssistant/1.1 (+ai)",
-      },
-    }).catch(() => null);
-
-    if (!res || !res.ok) {
-      apiFailed = true;
-    } else {
-      const data: any = await res.json().catch(() => null);
-      const items: any[] = data?.items || [];
-
-      out.push(
-        ...items
-          .map((r) => {
-            const d = r?.updated_at ? new Date(r.updated_at) : new Date();
-            const title = String(r?.full_name || r?.name || "").trim();
-            const snippet = String(r?.description || "").replace(/\s+/g, " ").trim().slice(0, 400);
-            if (!matchesKeywords(section, `${title} ${snippet}`)) return null;
-            return {
-              title,
-              url: normalizeUrl(String(r?.html_url || "")),
-              snippet,
-              publishedAt: isNaN(d.getTime()) ? new Date() : d,
-              sourceName: "GitHub",
-              baseTrust: 0.7,
-            };
-          })
-          .filter((c): c is Candidate => Boolean(c))
-      );
-    }
+  if (urls.length === 0) {
+    urls.push("https://github.blog/feed/");
   }
 
-  if (!token || apiFailed || out.length === 0) {
-    out.push(...(await fetchGithubBlog(section)));
-  }
-
-  const seen = new Set<string>();
-  const dedup = out.filter((c) => {
-    if (!c.title || !c.url) return false;
-    if (seen.has(c.url)) return false;
-    seen.add(c.url);
-    return true;
+  const out = await fetchRssCandidatesFromUrls({
+    urls,
+    sourceName: "GitHub",
+    baseTrust: 0.68,
+    section,
   });
 
-  return dedup.slice(0, 6);
+  return out.slice(0, 6);
 }
 
-async function fetchYouTube(section: CanonicalSection, q: string): Promise<Candidate[]> {
+async function fetchYouTube(section: CanonicalSection, _q: string): Promise<Candidate[]> {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) return [];
 
-  const query = `${q} -shorts -short -reel -tiktok`;
+  const query = `${youtubeQuery(section)} ${YOUTUBE_NEGATIVE_QUERY}`.trim();
+  const orderRaw = String(process.env.YOUTUBE_ORDER || "viewCount").trim();
+  const allowedOrder = new Set(["date", "rating", "relevance", "title", "videoCount", "viewCount"]);
+  const order = allowedOrder.has(orderRaw) ? orderRaw : "viewCount";
   const params = new URLSearchParams({
     part: "snippet",
     type: "video",
     maxResults: "12",
-    order: "relevance",
+    order,
     q: query,
     key,
     videoEmbeddable: "true",
@@ -528,6 +597,8 @@ async function fetchYouTube(section: CanonicalSection, q: string): Promise<Candi
 
   const category = YOUTUBE_CATEGORY_ID[section];
   if (category) params.set("videoCategoryId", category);
+  params.set("videoDuration", YOUTUBE_DURATION_FILTER[section] || "medium");
+  params.set("videoDefinition", "high");
 
   const publishedDays = clamp(Number(process.env.YOUTUBE_PUBLISHED_DAYS || 60), 7, 180);
   const publishedAfter = new Date(Date.now() - publishedDays * 24 * 60 * 60 * 1000).toISOString();
@@ -568,23 +639,40 @@ async function fetchYouTube(section: CanonicalSection, q: string): Promise<Candi
   for (const it of detailItems) {
     if (it?.id) detailMap.set(String(it.id), it);
   }
+  if (detailMap.size === 0) return [];
 
   const minDuration = YOUTUBE_MIN_DURATION_SEC[section] ?? 180;
+  const minViews = clamp(Number(process.env.YOUTUBE_MIN_VIEWS || 5000), 0, 1_000_000_000);
+  const minLikes = clamp(Number(process.env.YOUTUBE_MIN_LIKES || 50), 0, 100_000_000);
+  const minViewsPerDay = clamp(Number(process.env.YOUTUBE_MIN_VIEWS_PER_DAY || 200), 0, 1_000_000);
+  const minLikeRatio = clamp(Number(process.env.YOUTUBE_MIN_LIKE_RATIO || 0.005), 0, 1);
 
   return items
     .map((it) => {
       const id = String(it?.id?.videoId || "");
       if (!id) return null;
       const detail = detailMap.get(id);
+      if (!detail?.contentDetails) return null;
       const sn = detail?.snippet || it?.snippet || {};
       const title = String(sn?.title || "").trim();
       const snippet = String(sn?.description || "").replace(/\s+/g, " ").trim().slice(0, 400);
+      const channel = String(sn?.channelTitle || "").trim();
       const d = sn?.publishedAt ? new Date(sn.publishedAt) : new Date();
       const durationSec = parseIsoDuration(detail?.contentDetails?.duration || "");
-      const text = `${title} ${snippet}`.toLowerCase();
+      const viewCount = parseNumber(detail?.statistics?.viewCount);
+      const likeCount = parseNumber(detail?.statistics?.likeCount);
+      const text = `${title} ${snippet} ${channel}`.toLowerCase();
+      const ageDays = Math.max(1, hoursBetween(new Date(), d) / 24);
+      const viewsPerDay = viewCount / ageDays;
+      const likeRatio = viewCount > 0 ? likeCount / viewCount : 0;
 
-      if (durationSec && durationSec < minDuration) return null;
+      if (!durationSec || durationSec < minDuration) return null;
+      if (sn?.liveBroadcastContent && sn.liveBroadcastContent !== "none") return null;
       if (text.includes("#shorts") || text.includes("shorts")) return null;
+      if (YOUTUBE_LOW_QUALITY_MARKERS.some((m) => text.includes(m))) return null;
+      if (viewCount < minViews && viewsPerDay < minViewsPerDay) return null;
+      if (likeCount && likeCount < minLikes) return null;
+      if (likeCount && viewCount && likeRatio < minLikeRatio) return null;
       if (!matchesKeywords(section, text)) return null;
 
       return {
@@ -593,53 +681,26 @@ async function fetchYouTube(section: CanonicalSection, q: string): Promise<Candi
         snippet,
         publishedAt: isNaN(d.getTime()) ? new Date() : d,
         sourceName: "YouTube",
-        baseTrust: durationSec >= minDuration + 300 ? 0.65 : 0.6,
+        baseTrust: durationSec >= minDuration + 300 ? 0.68 : 0.62,
       };
     })
     .filter((c): c is Candidate => Boolean(c && c.title && c.url))
     .slice(0, 6);
 }
 
-async function fetchX(q: string): Promise<Candidate[]> {
-  const token = process.env.X_BEARER_TOKEN;
-  if (!token) return [];
+async function fetchX(section: CanonicalSection): Promise<Candidate[]> {
+  const urls = rssUrlsForProvider("X", section);
+  if (urls.length === 0) return [];
 
-  // X Standard Search API (v1.1). Bearer token (app auth) supported in most tiers.
-  // Docs: https://api.x.com/1.1/search/tweets.json
-  const params = new URLSearchParams({
-    q,
-    result_type: "recent",
-    count: "15",
+  const out = await fetchRssCandidatesFromUrls({
+    urls,
+    sourceName: "X",
+    baseTrust: 0.55,
+    section,
   });
-  const url = `https://api.x.com/1.1/search/tweets.json?${params.toString()}`;
 
-  const res = await fetch(url, {
-    headers: {
-      authorization: `Bearer ${token}`,
-      "user-agent": "AtlasAssistant/1.1 (+ai)",
-    },
-  }).catch(() => null);
-
-  if (!res || !res.ok) return [];
-  const data: any = await res.json().catch(() => null);
-  const statuses: any[] = data?.statuses || [];
-
-  return statuses
-    .map((t) => {
-      const d = t?.created_at ? new Date(t.created_at) : new Date();
-      const id = String(t?.id_str || t?.id || "").trim();
-      const text = String(t?.text || "").replace(/\s+/g, " ").trim();
-      const screenName = String(t?.user?.screen_name || "x").trim();
-      return {
-        title: text.slice(0, 110),
-        url: normalizeUrl(id ? `https://x.com/${screenName}/status/${id}` : ""),
-        snippet: text.slice(0, 400),
-        publishedAt: isNaN(d.getTime()) ? new Date() : d,
-        sourceName: `X @${screenName}`,
-        baseTrust: 0.5,
-      };
-    })
-    .filter((c) => c.title && c.url)
+  return out
+    .filter((c) => !/^rt\\b/i.test(c.title || ""))
     .slice(0, 6);
 }
 
@@ -655,10 +716,25 @@ function scoreCandidate(section: CanonicalSection, c: Candidate) {
   return clamp(0.55 * trust + 0.35 * rs + 0.10 * clamp(kw, 0, 0.25), 0, 1);
 }
 
+function hasProviderRss(provider: "X" | "GITHUB") {
+  if (envList(`${provider}_RSS_URLS`).length || envList(`${provider}_RSS_URL`).length) return true;
+  const sections = Object.keys(SECTION_POLICIES) as CanonicalSection[];
+  return sections.some((section) => {
+    const upper = section.toUpperCase();
+    return (
+      envList(`${provider}_RSS_URLS_${upper}`).length > 0 ||
+      envList(`${provider}_RSS_URL_${upper}`).length > 0
+    );
+  });
+}
+
 function isDiscoveryEnabled() {
   // The AI tab must be empty unless at least one of these provider keys is set.
   // (No other sources are allowed in the AI tab.)
-  return Boolean(process.env.X_BEARER_TOKEN || process.env.YOUTUBE_API_KEY || process.env.GITHUB_TOKEN);
+  const hasYouTube = Boolean(process.env.YOUTUBE_API_KEY);
+  const hasGithub = hasProviderRss("GITHUB");
+  const hasX = hasProviderRss("X");
+  return hasYouTube || hasGithub || hasX;
 }
 
 export async function discoverOnce() {
@@ -720,7 +796,7 @@ export async function discoverOnce() {
       // AI tab allows only these three providers.
       fetchGithub(section, q),
       fetchYouTube(section, q),
-      fetchX(q),
+      fetchX(section),
     ]);
 
     const raw: Candidate[] = [];
