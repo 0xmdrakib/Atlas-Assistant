@@ -90,6 +90,40 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
+    const signature = req.headers.get("Upstash-Signature") ?? req.headers.get("upstash-signature");
+
+    if (signature) {
+      const body = await req.text();
+
+      const { receiver, errorResponse } = receiverOrErrorResponse();
+      if (errorResponse) return errorResponse;
+
+      const u = new URL(req.url);
+      const candidateUrls = [req.url, `${u.origin}${u.pathname}`];
+
+      let isValid = false;
+      try {
+        for (const url of candidateUrls) {
+          // eslint-disable-next-line no-await-in-loop
+          isValid = await receiver!.verify({ signature, body, url });
+          if (isValid) break;
+        }
+      } catch (e: any) {
+        console.error("QStash signature verification threw (GET):", e);
+        return NextResponse.json(
+          { ok: false, error: "Signature verification error", message: e?.message || String(e) },
+          { status: 401 }
+        );
+      }
+
+      if (!isValid) {
+        return NextResponse.json({ ok: false, error: "Invalid signature" }, { status: 401 });
+      }
+
+      const result = await discoverOnce();
+      return NextResponse.json(result);
+    }
+
     const url = new URL(req.url);
     const token = url.searchParams.get("token");
 
