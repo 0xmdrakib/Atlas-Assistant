@@ -398,29 +398,30 @@ export async function ingestOnce() {
   }
 
   // Window + retention are based on createdAt (collection time).
-  // NOTE: Counting 1d/7d/30d across all sections can be expensive on serverless
-  // (and can consume most of a small INGEST_TIMEOUT_MS budget). For ingestion we
-  // only need to know whether a section is completely empty (for fallbacks).
-  // We defer expensive pruning/counting work until later, and only if we have time.
+  // Precompute counts so per-day/per-week caps stay strict even if pruning is skipped.
   const now = Date.now();
   const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
   const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
   const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
   const state: Record<string, { dayCount: number; weekCount: number; monthCount: number }> = {};
-  for (const sec of sections) {
-    const secs = sectionAliases(sec as CanonicalSection);
-    const exists = await prisma.item.findFirst({
-      where: {
-        section: { in: secs },
-        createdAt: { gte: monthAgo },
-        NOT: [{ source: { is: { type: "discovery" } } }, { source: { is: { type: "ai" } } }],
-      },
-      select: { id: true },
-    });
-    // We start day/week counts at 0; enforceSectionCaps (if it runs) will compute
-    // exact keeps. These counters are only used as soft guardrails in this function.
-    state[sec] = { dayCount: 0, weekCount: 0, monthCount: exists ? 1 : 0 };
+  for (const sec of sections) state[sec] = { dayCount: 0, weekCount: 0, monthCount: 0 };
+
+  const recentItems = await prisma.item.findMany({
+    where: {
+      createdAt: { gte: monthAgo },
+      NOT: [{ source: { is: { type: "discovery" } } }, { source: { is: { type: "ai" } } }],
+    },
+    select: { section: true, createdAt: true },
+  });
+
+  for (const it of recentItems) {
+    const sec = toCanonicalSection(it.section);
+    const bucket = state[sec];
+    if (!bucket) continue;
+    if (it.createdAt >= dayAgo) bucket.dayCount += 1;
+    if (it.createdAt >= weekAgo) bucket.weekCount += 1;
+    if (it.createdAt >= monthAgo) bucket.monthCount += 1;
   }
 
   // Product rule: feed ingest is hourly and may add at most 1 new item per section per run.
@@ -622,10 +623,6 @@ export async function ingestOnce() {
     faith: 180,
   };
 
-  const BUFFER_DAILY_EXTRA = 12; // allow replacement even when cap is reached
-  const BUFFER_WEEKLY_EXTRA = 40;
-  const BUFFER_MONTHLY_EXTRA = 120;
-
   await mapLimit(selected, concurrency, async (s) => {
     if (Date.now() > hardDeadlineAt) return;
 
@@ -638,10 +635,7 @@ export async function ingestOnce() {
     processedSources += 1;
 
     // If we're already far above caps (rare), skip to keep runtime stable.
-    if (
-      state[sec].dayCount >= policy.dailyCap + BUFFER_DAILY_EXTRA &&
-      state[sec].weekCount >= policy.weeklyCap + BUFFER_WEEKLY_EXTRA
-    ) {
+    if (state[sec].dayCount >= policy.dailyCap || state[sec].weekCount >= policy.weeklyCap) {
       skippedByCaps += 1;
       return;
     }
@@ -706,8 +700,9 @@ export async function ingestOnce() {
 
       if (addedThisRun[sec] >= 1) break;
 
-      if (state[sec].weekCount >= policy.weeklyCap + BUFFER_WEEKLY_EXTRA) break;
-      if (sec === "history" && state[sec].monthCount >= policy.monthlyCap + BUFFER_MONTHLY_EXTRA) break;
+      if (state[sec].dayCount >= policy.dailyCap) break;
+      if (state[sec].weekCount >= policy.weeklyCap) break;
+      if (sec === "history" && state[sec].monthCount >= policy.monthlyCap) break;
 
       try {
         // Reserve the slot before awaiting network/DB so concurrent workers
@@ -784,7 +779,9 @@ export async function ingestOnce() {
       chosen = gn.slice(0, 1);
     }
     for (const g of chosen) {
-      if (state[sec].weekCount >= policy.weeklyCap + BUFFER_WEEKLY_EXTRA) break;
+      if (state[sec].dayCount >= policy.dailyCap) break;
+      if (state[sec].weekCount >= policy.weeklyCap) break;
+      if (sec === "history" && state[sec].monthCount >= policy.monthlyCap) break;
       try {
         addedThisRun[sec] = 1;
         await prisma.item.upsert({
