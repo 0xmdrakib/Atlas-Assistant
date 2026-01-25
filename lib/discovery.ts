@@ -28,6 +28,21 @@ const parser: Parser<unknown, FeedItem> = new Parser({
   headers: { "user-agent": "AtlasAssistant/1.1 (+ai)" },
 });
 
+function normalizeBaseUrl(u: string): string {
+  return u.replace(/\/+$/, "");
+}
+
+function resolveReferer(): string {
+  const explicit = String(process.env.YOUTUBE_REFERER || "").trim();
+  if (explicit) return normalizeBaseUrl(explicit);
+
+  const vercel = String(process.env.VERCEL_URL || "").trim();
+  if (vercel) return `https://${normalizeBaseUrl(vercel)}`;
+
+  const next = String(process.env.NEXTAUTH_URL || "").trim();
+  return next ? normalizeBaseUrl(next) : "";
+}
+
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
@@ -293,7 +308,14 @@ async function fetchYouTube(q: string): Promise<Candidate[]> {
 
   const query = encodeURIComponent(q);
   const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&order=date&q=${query}&key=${key}`;
-  const res = await fetch(url, { headers: { "user-agent": "AtlasAssistant/1.1 (+ai)" } }).catch(() => null);
+  const referer = resolveReferer();
+  const headers: Record<string, string> = { "user-agent": "AtlasAssistant/1.1 (+ai)" };
+  if (referer) {
+    headers.referer = referer;
+    headers.origin = referer;
+  }
+
+  const res = await fetch(url, { headers }).catch(() => null);
   if (!res || !res.ok) return [];
 
   const data: any = await res.json().catch(() => null);
