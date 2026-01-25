@@ -144,6 +144,43 @@ function normalizeTopic(t: string) {
   return ALIASES[n] || n;
 }
 
+function normalizeUrl(raw: string): string {
+  const u = String(raw || "").trim();
+  if (!u) return "";
+  return u
+    .replace(/([?&](utm_[^=]+|ref|source|fbclid|gclid)=[^&]+)/gi, "")
+    .replace(/[?&]$/, "");
+}
+
+const LOW_QUALITY_MARKERS = [
+  "sponsored",
+  "advertorial",
+  "press release",
+  "partner content",
+  "newsletter",
+  "subscribe",
+  "podcast",
+  "deal",
+  "coupon",
+  "giveaway",
+];
+
+function qualityScore(title: string, snippet: string): number {
+  let score = 1;
+  const t = String(title || "").trim();
+  const s = String(snippet || "").trim();
+
+  if (t.length < 20) score -= 0.15;
+  if (t.length < 12) score -= 0.2;
+  if (s.length < 80) score -= 0.2;
+  if (s.length < 40) score -= 0.3;
+
+  const text = `${t} ${s}`.toLowerCase();
+  if (LOW_QUALITY_MARKERS.some((m) => text.includes(m))) score -= 0.35;
+
+  return clamp(score, 0, 1);
+}
+
 const CATEGORY_RULES: Record<CanonicalSection, Array<{ code: string; keywords: string[] }>> = {
   global: [
     { code: "geopolitics", keywords: ["election", "diplom", "sanction", "summit", "treaty"] },
@@ -290,6 +327,17 @@ type SeedSource = {
   enabled?: boolean;
 };
 
+type IngestCandidate = {
+  section: CanonicalSection;
+  sourceId: string;
+  title: string;
+  url: string;
+  snippet: string;
+  topics: string[];
+  score: number;
+  publishedAt: Date;
+  country: string | null;
+};
 
 async function syncSeedSourcesIntoDb(): Promise<{ inserted: number }> {
   const syncEnabled = envBool("SOURCE_SYNC_ENABLED", false);
@@ -429,10 +477,28 @@ export async function ingestOnce() {
   const addedThisRun: Record<string, number> = {};
   for (const sec of sections) addedThisRun[sec] = 0;
 
+  const bestBySection: Record<CanonicalSection, IngestCandidate | null> = {
+    global: null,
+    tech: null,
+    innovators: null,
+    early: null,
+    creators: null,
+    universe: null,
+    history: null,
+    faith: null,
+  };
+
   function bumpWindowCounts(section: string, createdAt: Date) {
     if (createdAt >= dayAgo) state[section].dayCount += 1;
     if (createdAt >= weekAgo) state[section].weekCount += 1;
     if (createdAt >= monthAgo) state[section].monthCount += 1;
+  }
+
+  function shouldReplaceBest(prev: IngestCandidate | null, next: IngestCandidate) {
+    if (!prev) return true;
+    if (next.score > prev.score) return true;
+    if (next.score === prev.score && next.publishedAt > prev.publishedAt) return true;
+    return false;
   }
 
   // Choose a rotating subset of sources so 1000+ sources stays fast.
@@ -629,12 +695,9 @@ export async function ingestOnce() {
     const sec = toCanonicalSection(s.section);
     const policy = SECTION_POLICIES[sec];
 
-    // Hard per-run cap: if this section already got an item, skip remaining sources.
-    if (addedThisRun[sec] >= 1) return;
-
     processedSources += 1;
 
-    // If we're already far above caps (rare), skip to keep runtime stable.
+    // If caps are already full, skip this source to keep runtime stable.
     if (state[sec].dayCount >= policy.dailyCap || state[sec].weekCount >= policy.weeklyCap) {
       skippedByCaps += 1;
       return;
@@ -671,7 +734,7 @@ export async function ingestOnce() {
         const publishedAt = safeDate(it) || new Date();
         const title = asText((it as any).title).trim();
         const urlRaw = asText((it as any).link || (it as any).url || (it as any).guid).trim();
-        const url = urlRaw.startsWith("http") ? urlRaw : "";
+        const url = urlRaw.startsWith("http") ? normalizeUrl(urlRaw) : "";
         const snippet = asText((it as any).contentSnippet || (it as any).content)
           .replace(/\s+/g, " ")
           .trim()
@@ -685,7 +748,8 @@ export async function ingestOnce() {
 
         const rs = recencyScore(publishedAt, policy.recencyHalfLifeHours);
         const trust = clamp((s.trustScore || 60) / 100, 0, 1);
-        const score = clamp(0.55 * trust + 0.35 * rs + 0.10 * clamp(kw, 0, 0.25), 0, 1);
+        const quality = qualityScore(title, snippet);
+        const score = clamp(0.5 * trust + 0.3 * rs + 0.1 * clamp(kw, 0, 0.25) + 0.1 * quality, 0, 1);
 
         return { title, url, snippet, publishedAt, topics, score };
       })
@@ -695,57 +759,78 @@ export async function ingestOnce() {
 
     candidatesSeen += candidates.length;
 
-    for (const c of candidates) {
-      if (Date.now() > hardDeadlineAt) break;
+    const best = candidates[0];
+    if (!best) return;
 
-      if (addedThisRun[sec] >= 1) break;
+    const candidate: IngestCandidate = {
+      section: sec,
+      sourceId: s.id,
+      title: best.title,
+      url: best.url,
+      snippet: best.snippet,
+      topics: best.topics,
+      score: best.score,
+      publishedAt: best.publishedAt,
+      country: s.country || null,
+    };
 
-      if (state[sec].dayCount >= policy.dailyCap) break;
-      if (state[sec].weekCount >= policy.weeklyCap) break;
-      if (sec === "history" && state[sec].monthCount >= policy.monthlyCap) break;
-
-      try {
-        // Reserve the slot before awaiting network/DB so concurrent workers
-        // don't insert multiple items for the same section.
-        addedThisRun[sec] = 1;
-        await prisma.item.upsert({
-          where: { url: c.url },
-          create: {
-            sourceId: s.id,
-            section: sec,
-            title: c.title,
-            summary: c.snippet || c.title,
-            aiSummary: null,
-            url: c.url,
-            country: s.country || null,
-            topics: c.topics,
-            score: c.score,
-            publishedAt: c.publishedAt,
-          },
-          update: {
-            sourceId: s.id,
-            section: sec,
-            title: c.title,
-            summary: c.snippet || c.title,
-            country: s.country || null,
-            topics: c.topics,
-            score: c.score,
-            publishedAt: c.publishedAt,
-            // Treat `createdAt` as "collectedAt" so the 1-day/7-day windows
-            // show items that are still surfacing in the feed even if the URL
-            // already existed in the DB.
-            createdAt: new Date(),
-          },
-        });
-        added += 1;
-        bumpWindowCounts(sec, new Date());
-      } catch {
-        // If the upsert fails, release the slot so another source can try.
-        addedThisRun[sec] = 0;
-        skipped += 1;
-      }
+    if (shouldReplaceBest(bestBySection[sec], candidate)) {
+      bestBySection[sec] = candidate;
     }
   });
+
+  for (const sec of sections) {
+    const policy = SECTION_POLICIES[sec];
+    const candidate = bestBySection[sec as CanonicalSection];
+    if (!candidate) continue;
+
+    if (state[sec].dayCount >= policy.dailyCap || state[sec].weekCount >= policy.weeklyCap) {
+      skippedByCaps += 1;
+      continue;
+    }
+    if (sec === "history" && state[sec].monthCount >= policy.monthlyCap) {
+      skippedByCaps += 1;
+      continue;
+    }
+
+    try {
+      addedThisRun[sec] = 1;
+      await prisma.item.upsert({
+        where: { url: candidate.url },
+        create: {
+          sourceId: candidate.sourceId,
+          section: sec,
+          title: candidate.title,
+          summary: candidate.snippet || candidate.title,
+          aiSummary: null,
+          url: candidate.url,
+          country: candidate.country,
+          topics: candidate.topics,
+          score: candidate.score,
+          publishedAt: candidate.publishedAt,
+        },
+        update: {
+          sourceId: candidate.sourceId,
+          section: sec,
+          title: candidate.title,
+          summary: candidate.snippet || candidate.title,
+          country: candidate.country,
+          topics: candidate.topics,
+          score: candidate.score,
+          publishedAt: candidate.publishedAt,
+          // Treat `createdAt` as "collectedAt" so the 1-day/7-day windows
+          // show items that are still surfacing in the feed even if the URL
+          // already existed in the DB.
+          createdAt: new Date(),
+        },
+      });
+      added += 1;
+      bumpWindowCounts(sec, new Date());
+    } catch {
+      addedThisRun[sec] = 0;
+      skipped += 1;
+    }
+  }
 
   // Safety net: if a section is totally empty, seed a few items from public GDELT.
   for (const sec of sections) {
