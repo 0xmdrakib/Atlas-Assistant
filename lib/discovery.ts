@@ -1,6 +1,7 @@
 import Parser from "rss-parser";
 import { prisma } from "@/lib/prisma";
 import { SECTION_POLICIES } from "@/lib/section-policy";
+import { aiSelectImportant } from "@/lib/aiProviders";
 
 type CanonicalSection = keyof typeof SECTION_POLICIES;
 
@@ -70,6 +71,45 @@ function envList(name: string): string[] {
   return raw
     .split(/[,;\n]+/g)
     .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+
+function rsshubBaseUrl() {
+  // Intentionally empty by default to avoid hammering public instances unless enabled.
+  // You can set it to a public instance (e.g. https://rsshub.app) or your own deployment.
+  const raw = String(process.env.RSSHUB_BASE_URL || process.env.X_RSSHUB_BASE_URL || "").trim();
+  if (!raw) return "";
+  const withScheme = raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
+  return normalizeBaseUrl(withScheme);
+}
+
+function rsshubTwitterKeywordUrls(section: CanonicalSection): string[] {
+  const base = rsshubBaseUrl();
+  if (!base) return [];
+
+  const upper = section.toUpperCase();
+  const explicit = [...envList(`X_KEYWORDS_${upper}`), ...envList("X_KEYWORDS")].filter(Boolean);
+  const fallbacks = (AI_SECTION_KEYWORDS[section] || []).slice(0, 3);
+  const keywords = (explicit.length ? explicit : fallbacks).slice(0, 4);
+
+  return keywords.map((k) => `${base}/twitter/keyword/${encodeURIComponent(k)}`);
+}
+
+function githubReleaseAtomUrls(section: CanonicalSection): string[] {
+  const upper = section.toUpperCase();
+  const repos = [...envList(`GITHUB_REPOS_${upper}`), ...envList("GITHUB_REPOS")].filter(Boolean).slice(0, 8);
+
+  return repos
+    .map((r) => String(r || "").trim())
+    .filter(Boolean)
+    .map((r) => {
+      // Accept either "owner/repo" or a full github url.
+      const m = r.match(/github\.com\/([^/]+)\/([^/\s#?]+)/i);
+      const repo = m ? `${m[1]}/${m[2]}` : r;
+      if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) return "";
+      return `https://github.com/${repo}/releases.atom`;
+    })
     .filter(Boolean);
 }
 
@@ -453,39 +493,38 @@ async function fetchText(url: string, timeoutMs = 12000) {
   }
 }
 
-async function fetchRssCandidates(args: {
-  url: string;
-  sourceName: string;
-  baseTrust: number;
-  section: CanonicalSection;
-}): Promise<Candidate[]> {
-  try {
-    const xml = await fetchText(args.url, 12_000);
-    const feed: any = await parser.parseString(xml);
-    const items = (feed?.items || []) as FeedItem[];
+async function fetchRssCandidates(
+  section: CanonicalSection,
+  url: string,
+  baseTrust: number,
+  sourceName: string
+): Promise<Candidate[]> {
+  const feed = await parser.parseURL(url);
+  const items = Array.isArray(feed.items) ? feed.items : [];
 
-    return items
-      .map((it) => {
-        const publishedAt = new Date(it.isoDate || it.pubDate || Date.now());
-        const title = String(it.title || "").trim();
-        const snippet = String(it.contentSnippet || it.content || "").replace(/\s+/g, " ").trim().slice(0, 400);
-        const url = normalizeUrl(String((it as any).link || (it as any).guid || ""));
-        const text = `${title} ${snippet}`.toLowerCase();
-        if (!matchesKeywords(args.section, text)) return null;
-        return {
-          title,
-          url,
-          snippet,
-          publishedAt: isNaN(publishedAt.getTime()) ? new Date() : publishedAt,
-          sourceName: args.sourceName,
-          baseTrust: args.baseTrust,
-        };
-      })
-      .filter((c): c is Candidate => Boolean(c && c.title && c.url))
-      .slice(0, 12);
-  } catch {
-    return [];
+  const matched: Candidate[] = [];
+  const all: Candidate[] = [];
+
+  for (const item of items) {
+    const title = String(item.title || "").trim();
+    const link = String(item.link || "").trim();
+    if (!title || !link) continue;
+
+    const snippet = String(item.contentSnippet || item.content || "").replace(/\s+/g, " ").trim().slice(0, 360);
+    const dt = item.isoDate || item.pubDate || "";
+    const publishedAt = dt ? new Date(dt) : new Date();
+
+    const text = `${title} ${snippet}`.toLowerCase();
+    const c: Candidate = { title, url: link, snippet, publishedAt, sourceName, baseTrust };
+
+    all.push(c);
+    if (matchesKeywords(section, text)) matched.push(c);
   }
+
+  // Keyword-first, but don't go silent: if keyword filtering yields nothing,
+  // return a small fallback set with reduced trust so the AI can still pick.
+  if (matched.length > 0) return matched;
+  return all.slice(0, 10).map((c) => ({ ...c, baseTrust: clamp(c.baseTrust * 0.85, 0, 1) }));
 }
 
 async function fetchRssCandidatesFromUrls(args: {
@@ -496,7 +535,7 @@ async function fetchRssCandidatesFromUrls(args: {
 }): Promise<Candidate[]> {
   const all: Candidate[] = [];
   for (const url of args.urls) {
-    const rows = await fetchRssCandidates({ url, sourceName: args.sourceName, baseTrust: args.baseTrust, section: args.section });
+	  const rows = await fetchRssCandidates(args.section, url, args.baseTrust, args.sourceName);
     all.push(...rows);
   }
 
@@ -559,11 +598,14 @@ async function fetchGdelt(section: CanonicalSection): Promise<Candidate[]> {
 }
 
 async function fetchGithub(section: CanonicalSection, _q: string): Promise<Candidate[]> {
-  const urls = rssUrlsForProvider("GITHUB", section);
+  // Prefer explicit RSS URLs; otherwise fall back to repo release Atom feeds
+  // (no GitHub API key needed), and finally to GitHub Blog as a general source.
+  const urls = [
+    ...rssUrlsForProvider("GITHUB", section),
+    ...githubReleaseAtomUrls(section),
+  ].filter(Boolean);
 
-  if (urls.length === 0) {
-    urls.push("https://github.blog/feed/");
-  }
+  if (urls.length === 0) urls.push("https://github.blog/feed/");
 
   const out = await fetchRssCandidatesFromUrls({
     urls,
@@ -689,7 +731,12 @@ async function fetchYouTube(section: CanonicalSection, _q: string): Promise<Cand
 }
 
 async function fetchX(section: CanonicalSection): Promise<Candidate[]> {
-  const urls = rssUrlsForProvider("X", section);
+  // Either provide explicit RSS URLs, or enable keyword-based RSSHub feeds via RSSHUB_BASE_URL.
+  const urls = [
+    ...rssUrlsForProvider("X", section),
+    ...rsshubTwitterKeywordUrls(section),
+  ].filter(Boolean);
+
   if (urls.length === 0) return [];
 
   const out = await fetchRssCandidatesFromUrls({
@@ -719,13 +766,24 @@ function scoreCandidate(section: CanonicalSection, c: Candidate) {
 function hasProviderRss(provider: "X" | "GITHUB") {
   if (envList(`${provider}_RSS_URLS`).length || envList(`${provider}_RSS_URL`).length) return true;
   const sections = Object.keys(SECTION_POLICIES) as CanonicalSection[];
-  return sections.some((section) => {
+  const bySection = sections.some((section) => {
     const upper = section.toUpperCase();
     return (
       envList(`${provider}_RSS_URLS_${upper}`).length > 0 ||
       envList(`${provider}_RSS_URL_${upper}`).length > 0
     );
   });
+  if (bySection) return true;
+
+  // Provider-specific fallbacks (no private API keys):
+  if (provider === "X") {
+    // Requires RSSHUB_BASE_URL to be set.
+    return Boolean(rsshubBaseUrl());
+  }
+  if (provider === "GITHUB") {
+    return sections.some((s) => githubReleaseAtomUrls(s).length > 0) || envList("GITHUB_REPOS").length > 0;
+  }
+  return false;
 }
 
 function isDiscoveryEnabled() {
@@ -746,10 +804,11 @@ export async function discoverOnce() {
   // - Run at most every 12 hours
   // - Add at most 1 item per provider (GitHub/YouTube/X) per run => max 3/run
   // - Hard caps: 6/day, 42/week, and keep only the most recent 7 days
-  const AI_RUN_INTERVAL_MS = 12 * 60 * 60 * 1000;
-  const AI_PER_RUN_CAP = 3;
-  const AI_DAILY_CAP = 6;
-  const AI_WEEKLY_CAP = 42;
+  const AI_RUN_INTERVAL_MS =
+    clamp(Number(process.env.AI_DISCOVERY_INTERVAL_HOURS || 12), 1, 168) * 60 * 60 * 1000;
+  const AI_PER_RUN_CAP = clamp(Number(process.env.AI_DISCOVERY_PER_RUN_CAP || 3), 1, 10);
+  const AI_DAILY_CAP = clamp(Number(process.env.AI_DISCOVERY_DAILY_CAP || 6), AI_PER_RUN_CAP, 250);
+  const AI_WEEKLY_CAP = clamp(Number(process.env.AI_DISCOVERY_WEEKLY_CAP || 42), AI_DAILY_CAP, 2000);
 
   const sections = Object.keys(SECTION_POLICIES) as CanonicalSection[];
   const now = Date.now();
@@ -829,7 +888,38 @@ export async function discoverOnce() {
       .sort((a, b) => b.score - a.score)
       .slice(0, 24);
 
-    if (!candidates.length) {
+    // Optional LLM re-ranking for better "best content" selection.
+    // We keep a deterministic fallback if the model call fails.
+    const llmEnabled =
+      Boolean(process.env.AI_DISCOVERY_API_KEY) &&
+      String(process.env.AI_DISCOVERY_USE_LLM || "1") !== "0" &&
+      candidates.length > 0;
+
+    let ranked = candidates;
+    if (llmEnabled) {
+      try {
+        const idx = await aiSelectImportant({
+          candidates: candidates.map((x) => ({
+            title: x.c.title,
+            sourceName: x.c.sourceName,
+            country: null,
+            url: x.c.url,
+            baseScore: x.score,
+          })),
+        });
+
+        const picked = idx
+          .map((i) => ranked[i])
+          .filter((x): x is (typeof ranked)[number] => Boolean(x));
+
+        const used = new Set(picked.map((x) => x.c.url));
+        ranked = [...picked, ...ranked.filter((x) => !used.has(x.c.url))];
+      } catch {
+        // ignore; keep heuristic ranking
+      }
+    }
+
+    if (!ranked.length) {
       await prisma.source.update({ where: { id: src.id }, data: { lastFetchedAt: new Date() } }).catch(() => null);
       skipped += 1;
       skippedReasons.noCandidates += 1;
@@ -850,7 +940,7 @@ export async function discoverOnce() {
 
     const picked: Candidate[] = [];
     const usedProviders = new Set<string>();
-    for (const x of candidates) {
+    for (const x of ranked) {
       const p = providerKey(x.c.sourceName || "");
       if (!p) continue;
       if (usedProviders.has(p)) continue;
