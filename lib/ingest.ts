@@ -165,21 +165,6 @@ const LOW_QUALITY_MARKERS = [
   "giveaway",
 ];
 
-function qualityScore(title: string, snippet: string): number {
-  let score = 1;
-  const t = String(title || "").trim();
-  const s = String(snippet || "").trim();
-
-  if (t.length < 20) score -= 0.15;
-  if (t.length < 12) score -= 0.2;
-  if (s.length < 80) score -= 0.2;
-  if (s.length < 40) score -= 0.3;
-
-  const text = `${t} ${s}`.toLowerCase();
-  if (LOW_QUALITY_MARKERS.some((m) => text.includes(m))) score -= 0.35;
-
-  return clamp(score, 0, 1);
-}
 
 const CATEGORY_RULES: Record<CanonicalSection, Array<{ code: string; keywords: string[] }>> = {
   global: [
@@ -284,18 +269,27 @@ function extractTopics(
 }
 
 
+
 function qualityScore(title: string, snippet: string) {
   const t = asText(title).trim();
   const s = asText(snippet).trim();
-  // Heuristic: prefer descriptive titles and non-empty snippets.
+
+  // Base: prefer descriptive titles + non-empty snippets.
   const titleLen = clamp(t.length, 0, 140);
   const snippetLen = clamp(s.length, 0, 480);
-  const titleScore = titleLen / 140;
-  const snippetScore = snippetLen / 480;
+  const base = 0.55 * (titleLen / 140) + 0.45 * (snippetLen / 480);
 
-  // Penalize very short / vague items.
-  const vague = /\b(update|watch|live|breaking|newsletter|podcast)\b/i.test(t) ? 0.12 : 0;
-  return clamp(0.55 * titleScore + 0.45 * snippetScore - vague, 0, 1);
+  // Penalties: promo/low-signal patterns.
+  const text = `${t} ${s}`.toLowerCase();
+  let penalty = 0;
+  if (t.length < 20) penalty += 0.15;
+  if (t.length < 12) penalty += 0.2;
+  if (s.length < 80) penalty += 0.2;
+  if (s.length < 40) penalty += 0.3;
+  if (LOW_QUALITY_MARKERS.some((m) => text.includes(m))) penalty += 0.35;
+  if (/(update|watch|live|breaking)/i.test(t)) penalty += 0.12;
+
+  return clamp(base - penalty, 0, 1);
 }
 
 function scoreCandidate(
