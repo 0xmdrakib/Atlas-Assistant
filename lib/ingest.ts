@@ -828,13 +828,13 @@ export async function ingestOnce() {
         if (LOW_QUALITY_MARKERS.some((m) => (title + " " + snippet).toLowerCase().includes(m))) return null;
         if (noRepeatHours > 0 && recentUrlBySection[sec].has(url)) return null;
 
-        const recentlyUsed = sourceCooldownHours > 0 && recentSourceBySection[sec].has(source.id);
+        const recentlyUsed = sourceCooldownHours > 0 && recentSourceBySection[sec].has(s.id);
 
-        const score = scoreCandidate(sec, source.trustScore, title, snippet, publishedAt, recentlyUsed);
+        const score = scoreCandidate(sec, s.trustScore, title, snippet, publishedAt, recentlyUsed);
 
         return {
           section: sec,
-          sourceId: source.id,
+          sourceId: s.id,
           title,
           url,
           snippet,
