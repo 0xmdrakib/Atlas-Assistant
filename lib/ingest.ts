@@ -248,9 +248,14 @@ const ALLOWED_TOPIC_CODES = new Set<string>(
     .map(normalizeTopic)
 );
 
-function extractTopics(section: CanonicalSection, item: FeedItem): string[] {
+function extractTopics(
+  section: CanonicalSection,
+  title: string,
+  snippet: string,
+  categories?: Array<string | null | undefined>
+): string[] {
   const out = new Set<string>();
-  const text = `${asText((item as any).title)} ${asText((item as any).contentSnippet || (item as any).content)}`.toLowerCase();
+  const text = `${asText(title)} ${asText(snippet)}`.toLowerCase();
 
   const add = (t: string) => {
     const n = normalizeTopic(t);
@@ -262,8 +267,8 @@ function extractTopics(section: CanonicalSection, item: FeedItem): string[] {
     if (rule.keywords.some((k) => text.includes(k))) add(rule.code);
   }
 
-  // Then RSS-provided categories, but only if they map to known topic codes.
-  for (const c of (item as any).categories || []) {
+  // Then feed-provided categories, but only if they map to known topic codes.
+  for (const c of categories || []) {
     const n = normalizeTopic(asText(c));
     if (n && ALLOWED_TOPIC_CODES.has(n)) add(n);
   }
@@ -276,6 +281,47 @@ function extractTopics(section: CanonicalSection, item: FeedItem): string[] {
 
   // Product rule: keep 1–2 categories per item (searchable + clean UI).
   return Array.from(out).slice(0, 2);
+}
+
+
+function qualityScore(title: string, snippet: string) {
+  const t = asText(title).trim();
+  const s = asText(snippet).trim();
+  // Heuristic: prefer descriptive titles and non-empty snippets.
+  const titleLen = clamp(t.length, 0, 140);
+  const snippetLen = clamp(s.length, 0, 480);
+  const titleScore = titleLen / 140;
+  const snippetScore = snippetLen / 480;
+
+  // Penalize very short / vague items.
+  const vague = /\b(update|watch|live|breaking|newsletter|podcast)\b/i.test(t) ? 0.12 : 0;
+  return clamp(0.55 * titleScore + 0.45 * snippetScore - vague, 0, 1);
+}
+
+function scoreCandidate(
+  section: CanonicalSection,
+  trustScore: number,
+  title: string,
+  snippet: string,
+  publishedAt: Date,
+  recentlyUsedSource: boolean
+) {
+  const policy = SECTION_POLICIES[section];
+  const rs = recencyScore(publishedAt, policy.recencyHalfLifeHours);
+  const trust = clamp(trustScore / 100, 0, 1);
+
+  const text = `${asText(title)} ${asText(snippet)}`.toLowerCase();
+  let kw = 0;
+  for (const k of policy.keywordBoosts) if (text.includes(k.keyword)) kw += k.boost;
+
+  // Trust and recency dominate, but keyword + quality help when sources are noisy.
+  let score = 0.42 * rs + 0.33 * trust + 0.18 * qualityScore(title, snippet) + 0.07 * clamp(kw, 0, 0.25);
+
+  // Diversity: if this source already won recently in this section, nudge it down
+  // so other high-quality sources get a chance.
+  if (recentlyUsedSource) score *= 0.92;
+
+  return clamp(score, 0, 1);
 }
 
 function safeDate(item: FeedItem) {
@@ -355,8 +401,7 @@ async function syncSeedSourcesIntoDb(): Promise<{ inserted: number }> {
       url: src.url,
       type: src.type,
       trustScore: src.trustScore ?? 50,
-      tags: Array.isArray(src.tags) ? src.tags : [],
-      enabled: src.enabled ?? true,
+enabled: src.enabled ?? true,
     })),
     skipDuplicates: true,
   });
@@ -455,18 +500,48 @@ export async function ingestOnce() {
   const state: Record<string, { dayCount: number; weekCount: number; monthCount: number }> = {};
   for (const sec of sections) state[sec] = { dayCount: 0, weekCount: 0, monthCount: 0 };
 
+  const noRepeatHours = clamp(Number(process.env.INGEST_NO_REPEAT_HOURS || 12), 0, 168);
+  const noRepeatSince = new Date(now - noRepeatHours * 60 * 60 * 1000);
+
+  const recentUrlBySection: Record<CanonicalSection, Set<string>> = {
+    global: new Set(),
+    tech: new Set(),
+    innovators: new Set(),
+    early: new Set(),
+    creators: new Set(),
+    universe: new Set(),
+    history: new Set(),
+    faith: new Set(),
+  };
+
+  const sourceCooldownHours = clamp(Number(process.env.INGEST_SOURCE_COOLDOWN_HOURS || 6), 0, 48);
+  const sourceCooldownSince = new Date(Date.now() - sourceCooldownHours * 60 * 60 * 1000);
+  const recentSourceBySection: Record<CanonicalSection, Set<string>> = {
+    global: new Set(),
+    tech: new Set(),
+    innovators: new Set(),
+    early: new Set(),
+    creators: new Set(),
+    universe: new Set(),
+    history: new Set(),
+    faith: new Set(),
+  };
+
+
   const recentItems = await prisma.item.findMany({
     where: {
       createdAt: { gte: monthAgo },
       NOT: [{ source: { is: { type: "discovery" } } }, { source: { is: { type: "ai" } } }],
     },
-    select: { section: true, createdAt: true },
+    select: { section: true, createdAt: true, url: true, sourceId: true },
   });
 
   for (const it of recentItems) {
     const sec = toCanonicalSection(it.section);
     const bucket = state[sec];
     if (!bucket) continue;
+    if (noRepeatHours > 0 && it.createdAt >= noRepeatSince && (it as any).url) recentUrlBySection[sec].add((it as any).url);
+    if (sourceCooldownHours > 0 && it.createdAt >= sourceCooldownSince) recentSourceBySection[sec].add((it as any).sourceId);
     if (it.createdAt >= dayAgo) bucket.dayCount += 1;
     if (it.createdAt >= weekAgo) bucket.weekCount += 1;
     if (it.createdAt >= monthAgo) bucket.monthCount += 1;
@@ -477,16 +552,26 @@ export async function ingestOnce() {
   const addedThisRun: Record<string, number> = {};
   for (const sec of sections) addedThisRun[sec] = 0;
 
-  const bestBySection: Record<CanonicalSection, IngestCandidate | null> = {
-    global: null,
-    tech: null,
-    innovators: null,
-    early: null,
-    creators: null,
-    universe: null,
-    history: null,
-    faith: null,
+  const candidatePoolSize = clamp(Number(process.env.INGEST_SECTION_POOL_SIZE || 24), 6, 80);
+  const topBySection: Record<CanonicalSection, IngestCandidate[]> = {
+    global: [],
+    tech: [],
+    innovators: [],
+    early: [],
+    creators: [],
+    universe: [],
+    history: [],
+    faith: [],
   };
+
+  function pushCandidate(section: CanonicalSection, c: IngestCandidate) {
+    const arr = topBySection[section];
+    if (!arr) return;
+    if (arr.some((x) => x.url === c.url)) return;
+    arr.push(c);
+    arr.sort((a, b) => (b.score - a.score) || (b.publishedAt.getTime() - a.publishedAt.getTime()));
+    if (arr.length > candidatePoolSize) arr.length = candidatePoolSize;
+  }
 
   function bumpWindowCounts(section: string, createdAt: Date) {
     if (createdAt >= dayAgo) state[section].dayCount += 1;
@@ -730,60 +815,56 @@ export async function ingestOnce() {
     const maxAgeDays = freshnessMaxDays[sec] ?? 60;
     const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000);
 
+    const perSourceCap = clamp(Number(process.env.INGEST_PER_SOURCE_CAP || policy.perRunCap || 1), 1, 10);
+
     const candidates = items
       .map((it) => {
         const publishedAt = safeDate(it) || new Date();
         const title = asText((it as any).title).trim();
         const urlRaw = asText((it as any).link || (it as any).url || (it as any).guid).trim();
         const url = urlRaw.startsWith("http") ? normalizeUrl(urlRaw) : "";
-        const snippet = asText((it as any).contentSnippet || (it as any).content)
+        const snippet = asText((it as any).contentSnippet || (it as any).content || (it as any).summary || "")
           .replace(/\s+/g, " ")
           .trim()
-          .slice(0, 400);
+          .slice(0, 480);
+        const topics = extractTopics(sec, title, snippet);
 
-        const topics = extractTopics(sec, it);
-        const text = `${title} ${snippet}`.toLowerCase();
+        if (!title || !url) return null;
+        if (publishedAt < cutoff) return null;
+        if (LOW_QUALITY_MARKERS.some((m) => (title + " " + snippet).toLowerCase().includes(m))) return null;
+        if (noRepeatHours > 0 && recentUrlBySection[sec].has(url)) return null;
 
-        let kw = 0;
-        for (const k of policy.keywordBoosts) if (text.includes(k.keyword)) kw += k.boost;
+        const recentlyUsed = sourceCooldownHours > 0 && recentSourceBySection[sec].has(source.id);
 
-        const rs = recencyScore(publishedAt, policy.recencyHalfLifeHours);
-        const trust = clamp((s.trustScore || 60) / 100, 0, 1);
-        const quality = qualityScore(title, snippet);
-        const score = clamp(0.5 * trust + 0.3 * rs + 0.1 * clamp(kw, 0, 0.25) + 0.1 * quality, 0, 1);
+        const score = scoreCandidate(sec, source.trustScore, title, snippet, publishedAt, recentlyUsed);
 
-        return { title, url, snippet, publishedAt, topics, score };
+        return {
+          section: sec,
+          sourceId: source.id,
+          title,
+          url,
+          snippet,
+          topics,
+          score,
+          publishedAt,
+          country: source.country || null,
+        };
       })
-      .filter((x) => x.title && x.url && x.publishedAt >= cutoff)
+      .filter((x): x is IngestCandidate => Boolean(x))
       .sort((a, b) => b.score - a.score)
-      .slice(0, policy.perRunCap);
+      .slice(0, perSourceCap);
 
     candidatesSeen += candidates.length;
 
-    const best = candidates[0];
-    if (!best) return;
-
-    const candidate: IngestCandidate = {
-      section: sec,
-      sourceId: s.id,
-      title: best.title,
-      url: best.url,
-      snippet: best.snippet,
-      topics: best.topics,
-      score: best.score,
-      publishedAt: best.publishedAt,
-      country: s.country || null,
-    };
-
-    if (shouldReplaceBest(bestBySection[sec], candidate)) {
-      bestBySection[sec] = candidate;
+    for (const cand of candidates) {
+      pushCandidate(sec, cand);
     }
   });
 
   for (const sec of sections) {
     const policy = SECTION_POLICIES[sec];
-    const candidate = bestBySection[sec as CanonicalSection];
-    if (!candidate) continue;
+    const pool = topBySection[sec as CanonicalSection] || [];
+    if (!pool.length) continue;
 
     if (state[sec].dayCount >= policy.dailyCap || state[sec].weekCount >= policy.weeklyCap) {
       skippedByCaps += 1;
@@ -794,42 +875,43 @@ export async function ingestOnce() {
       continue;
     }
 
-    try {
-      addedThisRun[sec] = 1;
-      await prisma.item.upsert({
-        where: { url: candidate.url },
-        create: {
-          sourceId: candidate.sourceId,
-          section: sec,
-          title: candidate.title,
-          summary: candidate.snippet || candidate.title,
-          aiSummary: null,
-          url: candidate.url,
-          country: candidate.country,
-          topics: candidate.topics,
-          score: candidate.score,
-          publishedAt: candidate.publishedAt,
-        },
-        update: {
-          sourceId: candidate.sourceId,
-          section: sec,
-          title: candidate.title,
-          summary: candidate.snippet || candidate.title,
-          country: candidate.country,
-          topics: candidate.topics,
-          score: candidate.score,
-          publishedAt: candidate.publishedAt,
-          // Treat `createdAt` as "collectedAt" so the 1-day/7-day windows
-          // show items that are still surfacing in the feed even if the URL
-          // already existed in the DB.
-          createdAt: new Date(),
-        },
-      });
-      added += 1;
-      bumpWindowCounts(sec, new Date());
-    } catch {
-      addedThisRun[sec] = 0;
-      skipped += 1;
+    addedThisRun[sec] = 0;
+
+    for (const candidate of pool) {
+      if (noRepeatHours > 0 && recentUrlBySection[sec].has(candidate.url)) continue;
+
+      try {
+        await prisma.item.create({
+          data: {
+            sourceId: candidate.sourceId,
+            section: sec,
+            title: candidate.title,
+            summary: candidate.snippet || candidate.title,
+            aiSummary: null,
+            url: candidate.url,
+            country: candidate.country,
+            topics: candidate.topics,
+            score: candidate.score,
+            publishedAt: candidate.publishedAt,
+          },
+        });
+
+        addedThisRun[sec] = 1;
+        added += 1;
+        bumpWindowCounts(sec, new Date());
+        if (noRepeatHours > 0) recentUrlBySection[sec].add(candidate.url);
+        break;
+      } catch (e: any) {
+        const code = e?.code || "";
+        const msg = String(e || "");
+        const isUnique = code === "P2002" || msg.includes("P2002") || msg.toLowerCase().includes("unique");
+        if (isUnique) {
+          skipped += 1;
+          continue;
+        }
+        skipped += 1;
+        break;
+      }
     }
   }
 
@@ -880,7 +962,7 @@ export async function ingestOnce() {
             aiSummary: null,
             url: g.url,
             country: null,
-            topics: extractTopics(sec as CanonicalSection, { title: g.title, contentSnippet: g.snippet }),
+            topics: extractTopics(sec as CanonicalSection, g.title, g.snippet),
             score: 0.76,
             publishedAt: g.publishedAt,
           },
