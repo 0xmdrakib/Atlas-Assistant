@@ -27,7 +27,7 @@ const DEFAULTS = {
 
 export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
   global: {
-    perRunCap: 1,
+    perRunCap: 2,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -43,7 +43,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   tech: {
-    perRunCap: 1,
+    perRunCap: 2,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -59,7 +59,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   innovators: {
-    perRunCap: 1,
+    perRunCap: 2,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -75,7 +75,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   early: {
-    perRunCap: 1,
+    perRunCap: 3,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -91,7 +91,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   creators: {
-    perRunCap: 1,
+    perRunCap: 3,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -106,7 +106,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   universe: {
-    perRunCap: 1,
+    perRunCap: 2,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -122,7 +122,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   history: {
-    perRunCap: 1,
+    perRunCap: 2,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
@@ -138,7 +138,7 @@ export const SECTION_POLICIES: Record<Section, SectionPolicy> = {
     ],
   },
   faith: {
-    perRunCap: 1,
+    perRunCap: 2,
     dailyCap: DEFAULTS.dailyCap,
     weeklyCap: DEFAULTS.weeklyCap,
     monthlyCap: DEFAULTS.weeklyCap,
