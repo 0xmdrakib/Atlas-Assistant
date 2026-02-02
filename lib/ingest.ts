@@ -828,6 +828,7 @@ export async function ingestOnce() {
         if (LOW_QUALITY_MARKERS.some((m) => (title + " " + snippet).toLowerCase().includes(m))) return null;
         if (noRepeatHours > 0 && recentUrlBySection[sec].has(url)) return null;
 
+        // IMPORTANT: inside this callback, the Source row is `s`.
         const recentlyUsed = sourceCooldownHours > 0 && recentSourceBySection[sec].has(s.id);
 
         const score = scoreCandidate(sec, s.trustScore, title, snippet, publishedAt, recentlyUsed);
@@ -841,7 +842,7 @@ export async function ingestOnce() {
           topics,
           score,
           publishedAt,
-          country: source.country || null,
+          country: s.country || null,
         };
       })
       .filter((x): x is IngestCandidate => Boolean(x))
