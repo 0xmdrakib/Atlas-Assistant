@@ -313,7 +313,10 @@ function scoreCandidate(
 
   // Diversity: if this source already won recently in this section, nudge it down
   // so other high-quality sources get a chance.
-  if (recentlyUsedSource) score *= 0.92;
+  if (recentlyUsedSource) {
+    const penalty = clamp(Number(process.env.INGEST_SOURCE_COOLDOWN_PENALTY || 0.75), 0.1, 1);
+    score *= penalty;
+  }
 
   return clamp(score, 0, 1);
 }
@@ -649,8 +652,46 @@ export async function ingestOnce() {
   for (const sec of sections) {
     const policy = SECTION_POLICIES[sec];
     const base = sourcesBySection[sec] || [];
-    let pool = base.filter((s) => (s.trustScore || 0) >= policy.minTrustScore);
-    if (pool.length === 0 && base.length > 0) pool = base;
+
+    // Core fix: don't "lock" the pool to only high-trust sources.
+    // Instead, sample mostly trusted sources but always include some of the rest,
+    // otherwise a section with 1–2 high-trust sources will *never* consider the others.
+    const trustedRatio = clamp(Number(process.env.INGEST_TRUSTED_RATIO || 0.7), 0, 1);
+    const selectionWindow = clamp(
+      Number(process.env.INGEST_SELECTION_WINDOW || perSection * 4),
+      perSection,
+      60
+    );
+
+    const window = base.slice(0, selectionWindow);
+    const trusted = window.filter((s) => (s.trustScore || 0) >= policy.minTrustScore);
+    const untrusted = window.filter((s) => (s.trustScore || 0) < policy.minTrustScore);
+
+    const wantTrusted = Math.min(trusted.length, Math.round(perSection * trustedRatio));
+    const wantUntrusted = Math.max(0, perSection - wantTrusted);
+
+    const pool = [...trusted.slice(0, wantTrusted), ...untrusted.slice(0, wantUntrusted)];
+
+    // If still short, fill from the remaining window (preserve "least recently fetched" bias).
+    if (pool.length < perSection) {
+      const already = new Set(pool.map((s) => s.id));
+      for (const s of window) {
+        if (already.has(s.id)) continue;
+        pool.push(s);
+        if (pool.length >= perSection) break;
+      }
+    }
+
+    // If the window itself is too short, fill from the rest of the section sources.
+    if (pool.length < perSection) {
+      const already = new Set(pool.map((s) => s.id));
+      for (const s of base) {
+        if (already.has(s.id)) continue;
+        pool.push(s);
+        if (pool.length >= perSection) break;
+      }
+    }
+
     poolBySection[sec] = pool;
   }
 
