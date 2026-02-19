@@ -1,3 +1,5 @@
+import { languageLabel as uiLanguageLabel } from "@/lib/i18n";
+
 /**
  * Provider-agnostic AI helpers.
  *
@@ -8,32 +10,13 @@
 
 export type Provider = "gemini" | "openai";
 
-// Map UI language codes to human-friendly labels for prompts.
-// Keep this list aligned with the language picker.
-export const LANGUAGE_LABELS: Record<string, string> = {
-  en: "English",
-  bn: "Bangla",
-  ar: "Arabic",
-  hi: "Hindi",
-  ur: "Urdu",
-  tr: "Turkish",
-  id: "Indonesian",
-  fr: "French",
-  es: "Spanish",
-  de: "German",
-  pt: "Portuguese",
-  it: "Italian",
-  ru: "Russian",
-  ja: "Japanese",
-  ko: "Korean",
-};
 
 function langLabel(lang?: string): string {
   const key = String(lang || "en").toLowerCase();
-  return LANGUAGE_LABELS[key] || "English";
+  return uiLanguageLabel(key) || "English";
 }
 
-function getProvider(kind: "summary" | "discovery"): Provider {
+function getProvider(kind: "summary"): Provider {
   const v = (process.env[`AI_${kind.toUpperCase()}_PROVIDER`] || "").toLowerCase();
   if (v === "openai") return "openai";
   // default
@@ -82,8 +65,14 @@ async function geminiGenerateText(args: {
     body.systemInstruction = { parts: [{ text: systemInstruction }] };
   }
 
-  if (responseMimeType) body.generationConfig.responseMimeType = responseMimeType;
-  if (responseJsonSchema) body.generationConfig.responseJsonSchema = responseJsonSchema;
+  if (responseMimeType) {
+    body.generationConfig.response_mime_type = responseMimeType;
+    body.generationConfig.responseMimeType = responseMimeType;
+  }
+  if (responseJsonSchema) {
+    body.generationConfig.response_json_schema = responseJsonSchema;
+    body.generationConfig.responseJsonSchema = responseJsonSchema;
+  }
 
   const res = await fetch(url, {
     method: "POST",
@@ -345,63 +334,3 @@ ${args.items
   return Array.isArray(parsed) ? parsed : [];
 }
 
-export async function aiSelectImportant(args: {
-  candidates: Array<{ title: string; sourceName: string; country: string | null; url: string; baseScore: number }>;
-}): Promise<number[]> {
-  const provider = getProvider("discovery");
-  const key = requiredEnv("AI_DISCOVERY_API_KEY");
-  const model =
-    process.env.AI_DISCOVERY_MODEL || (provider === "gemini" ? "gemini-2.0-flash" : "gpt-4o-mini");
-
-  // Keep the prompt small; we only need index selection.
-  const list = args.candidates
-    .slice(0, 30)
-    .map((c, i) => `${i}. ${c.title} | source=${c.sourceName} | country=${c.country || "?"} | score=${c.baseScore.toFixed(2)} | url=${c.url}`)
-    .join("\n");
-
-  const prompt = `You are ranking items for a high-signal feed.
-
-Pick the BEST 6 items (or fewer if low quality). Prefer:
-- reputable sources
-- novelty + impact
-- avoids clickbait
-- diverse topics
-
-Return ONLY a JSON array of integer indexes (e.g. [0,3,7]).
-
-Candidates:
-${list}`;
-
-  if (provider === "openai") {
-    const out = await openaiChatCompletion({
-      apiKey: key,
-      model,
-      messages: [
-        { role: "system", content: "Return only JSON." },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.1,
-      max_tokens: 120,
-    });
-    const parsed = JSON.parse(out);
-    return Array.isArray(parsed) ? parsed.map((n) => Number(n)).filter((n) => Number.isFinite(n)) : [];
-  }
-
-  const out = await geminiGenerateText({
-    apiKey: key,
-    model,
-    prompt,
-    systemInstruction: "Return only JSON.",
-    temperature: 0.1,
-    maxOutputTokens: 160,
-    responseMimeType: "application/json",
-    responseJsonSchema: {
-      type: "array",
-      items: { type: "integer" },
-    },
-  });
-
-  // Gemini may return JSON with whitespace/newlines — still valid JSON.
-  const parsed = JSON.parse(out);
-  return Array.isArray(parsed) ? parsed.map((n) => Number(n)).filter((n) => Number.isFinite(n)) : [];
-}
