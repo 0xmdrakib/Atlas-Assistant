@@ -1,135 +1,166 @@
-/**
- * LibreTranslate-backed translation helpers.
- *
- * Goal: translate feed content WITHOUT using an LLM, to avoid per-request token costs.
- *
- * Configure via env:
- * - TRANSLATE_API_URL   (e.g. https://translate.example.com)
- * - TRANSLATE_API_KEY   (optional; only if your LibreTranslate instance requires it)
- */
+import { languageByCode } from "@/lib/i18n";
 
-type TranslateResponse = {
-  translatedText?: string | string[];
-  detectedLanguage?: { language?: string; confidence?: number };
+export type TranslatableItem = {
+  id: string;
+  title: string;
+  summary: string | null;
 };
 
-function normalizeBaseUrl(u: string) {
-  return u.replace(/\/+$/, "");
+export type TranslatedItem = {
+  id: string;
+  title: string;
+  summary: string | null;
+};
+
+function requiredEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing required env var: ${name}`);
+  return v;
 }
 
 export function isTranslateEnabled(): boolean {
-  return Boolean(process.env.TRANSLATE_API_URL);
+  return Boolean(process.env.AI_TRANSLATE_API_KEY);
 }
 
-async function translateTextsOnce(args: {
-  target: string;
-  texts: string[];
-  source?: string;
-  timeoutMs?: number;
-}): Promise<string[]> {
-  const base = process.env.TRANSLATE_API_URL;
-  if (!base) return args.texts;
-
-  const target = String(args.target || "en").toLowerCase();
-  const source = String(args.source || "auto").toLowerCase();
-  const texts = (args.texts || []).map((t) => String(t ?? ""));
-
-  if (!texts.length) return [];
-
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), Math.max(2000, args.timeoutMs ?? 15_000));
-  try {
-    const url = `${normalizeBaseUrl(base)}/translate`;
-    const body: any = {
-      q: texts.length === 1 ? texts[0] : texts,
-      source,
-      target,
-      format: "text",
-    };
-    if (process.env.TRANSLATE_API_KEY) body.api_key = process.env.TRANSLATE_API_KEY;
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-
-    if (!res.ok) {
-      // Fail open: return original text so the feed still works.
-      return texts;
-    }
-
-    const json = (await res.json().catch(() => ({}))) as TranslateResponse;
-    const out = json?.translatedText;
-
-    if (Array.isArray(out)) return out.map((x) => String(x ?? ""));
-    if (typeof out === "string") return [out];
-
-    return texts;
-  } catch {
-    return texts;
-  } finally {
-    clearTimeout(t);
-  }
+function languageForPrompt(lang: string): { label: string; nativeLabel?: string } {
+  const L = languageByCode(lang);
+  if (!L) return { label: lang };
+  return { label: L.label, nativeLabel: L.nativeLabel };
 }
 
-/**
- * Translate many short strings safely.
- * LibreTranslate instances may enforce character limits; chunk to reduce failures.
- */
-export async function translateTexts(args: {
-  target: string;
-  texts: string[];
-  source?: string;
-}): Promise<string[]> {
-  const texts = (args.texts || []).map((t) => String(t ?? ""));
-  if (!texts.length) return [];
-
-  // Conservative chunking: 20 strings or ~3500 chars per request.
-  const chunks: string[][] = [];
-  let cur: string[] = [];
+function chunkByBudget(items: TranslatableItem[], maxItems: number, maxChars: number): TranslatableItem[][] {
+  const chunks: TranslatableItem[][] = [];
+  let cur: TranslatableItem[] = [];
   let curChars = 0;
-  for (const s of texts) {
-    const nextChars = curChars + s.length;
-    if (cur.length >= 20 || nextChars >= 3500) {
-      if (cur.length) chunks.push(cur);
+
+  const approx = (it: TranslatableItem) => (it.title?.length ?? 0) + (it.summary?.length ?? 0) + 24;
+
+  for (const it of items) {
+    const c = approx(it);
+    if (cur.length >= maxItems || (cur.length > 0 && curChars + c > maxChars)) {
+      chunks.push(cur);
       cur = [];
       curChars = 0;
     }
-    cur.push(s);
-    curChars += s.length;
+    cur.push(it);
+    curChars += c;
   }
   if (cur.length) chunks.push(cur);
-
-  const out: string[] = [];
-  for (const c of chunks) {
-    const translated = await translateTextsOnce({
-      target: args.target,
-      source: args.source || "auto",
-      texts: c,
-    });
-    out.push(...translated);
-  }
-  return out;
+  return chunks;
 }
 
-export async function translateItemBatch(args: {
-  lang: string;
-  items: Array<{ title: string; summary: string }>;
-}): Promise<Array<{ title: string; summary: string }>> {
-  const items = args.items || [];
-  if (!items.length) return [];
+async function geminiTranslateChunk(items: TranslatableItem[], targetLang: string): Promise<TranslatedItem[]> {
+  const apiKey = requiredEnv("AI_TRANSLATE_API_KEY");
+  const model = process.env.AI_TRANSLATE_MODEL || "gemini-2.5-flash-lite";
 
-  const flat = items.flatMap((it) => [it.title || "", it.summary || ""]);
-  const translated = await translateTexts({ target: args.lang, texts: flat, source: "auto" });
+  const target = languageForPrompt(targetLang);
+  const targetLabel = target.nativeLabel ? `${target.label} (${target.nativeLabel})` : target.label;
 
-  const out: Array<{ title: string; summary: string }> = [];
-  for (let i = 0; i < items.length; i++) {
-    out.push({
-      title: translated[i * 2] ?? items[i].title,
-      summary: translated[i * 2 + 1] ?? items[i].summary,
-    });
+  const payloadItems = items
+    .map((it) => ({
+      id: it.id,
+      title: it.title,
+      summary: it.summary ?? "",
+    }))
+    .filter(Boolean);
+
+  const prompt = [
+    `Translate the following items into ${targetLabel}.`,
+    `- Preserve URLs, @handles, #hashtags, numbers, punctuation, and Markdown formatting.`,
+    `- Keep proper nouns (people/org/product names) as-is unless there's a standard translation.`,
+    `- Return ONLY valid JSON matching the provided schema.`,
+    ``,
+    JSON.stringify(payloadItems),
+  ].join("\n");
+
+  const schema = {
+    type: "array",
+    items: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        title: { type: "string" },
+        summary: { type: "string" },
+      },
+      required: ["id", "title", "summary"],
+    },
+  };
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const body = {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 4096,
+      response_mime_type: "application/json",
+      response_json_schema: schema,
+      responseMimeType: "application/json",
+      responseJsonSchema: schema,
+    },
+  };
+
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!r.ok) {
+    const t = await r.text().catch(() => "");
+    throw new Error(`Gemini translate failed: ${r.status} ${t}`);
   }
-  return out;
+
+  const data = await r.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Gemini translate returned no text");
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // Some responses may already be JSON-ish but wrapped in whitespace; try a strict trim.
+    parsed = JSON.parse(String(text).trim());
+  }
+
+  if (!Array.isArray(parsed)) throw new Error("Gemini translate returned non-array JSON");
+
+  const out: TranslatedItem[] = parsed.map((x: any) => ({
+    id: String(x.id),
+    title: String(x.title ?? ""),
+    summary: String(x.summary ?? ""),
+  }));
+
+  // Return in the same order as input.
+  const byId = new Map(out.map((o) => [o.id, o]));
+  return items.map((it) => {
+    const got = byId.get(it.id);
+    return got
+      ? { id: it.id, title: got.title, summary: got.summary }
+      : { id: it.id, title: it.title, summary: it.summary };
+  });
+}
+
+export async function translateItemBatch(items: TranslatableItem[], targetLang: string): Promise<TranslatedItem[]> {
+  if (!isTranslateEnabled()) return items.map((it) => ({ ...it, summary: it.summary ?? "" }));
+
+  // If the target is English, no work needed.
+  if (targetLang === "en") return items.map((it) => ({ ...it, summary: it.summary ?? "" }));
+
+  const maxItems = Number(process.env.AI_TRANSLATE_BATCH_SIZE || 16);
+  const maxChars = Number(process.env.AI_TRANSLATE_MAX_CHARS || 12000);
+
+  const chunks = chunkByBudget(items, maxItems, maxChars);
+
+  const translated: TranslatedItem[] = [];
+  for (const chunk of chunks) {
+    try {
+      const out = await geminiTranslateChunk(chunk, targetLang);
+      translated.push(...out);
+    } catch (err) {
+      console.error("translateItemBatch chunk failed", err);
+      translated.push(...chunk.map((it) => ({ id: it.id, title: it.title, summary: it.summary ?? "" })));
+    }
+  }
+  return translated;
 }
