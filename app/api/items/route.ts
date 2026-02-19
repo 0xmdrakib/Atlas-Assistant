@@ -129,6 +129,8 @@ export async function GET(req: NextRequest) {
         updatedAt: new Date().toISOString(),
         translateEnabled: true,
       },
+    }, {
+      headers: { "Cache-Control": "no-store" },
     });
   }
 
