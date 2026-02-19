@@ -60,8 +60,26 @@ export function Feed({ section }: { section: Section }) {
     const json = await res.json();
     const meta = json?.meta || {};
 
-    setItems(Array.isArray(json?.items) ? json.items : []);
-    setLast(new Date().toISOString());
+    const rawItems = Array.isArray(json?.items) ? json.items : [];
+const normalized = rawItems.map((it: any) => ({
+  id: String(it?.id ?? ""),
+  section: (it?.section ?? section) as Section,
+  title: String(it?.title ?? ""),
+  summary: String(it?.summary ?? ""),
+  aiSummary: typeof it?.aiSummary === "string" ? it.aiSummary : undefined,
+  // Backward/forward compatible with both shapes:
+  // - new API: { sourceName: string }
+  // - older API: { source: { name: string } }
+  sourceName: String(it?.sourceName ?? it?.source?.name ?? "Unknown"),
+  url: String(it?.url ?? ""),
+  country: typeof it?.country === "string" ? it.country : undefined,
+  topics: Array.isArray(it?.topics) ? it.topics : [],
+  publishedAt: String(it?.publishedAt ?? it?.createdAt ?? new Date().toISOString()),
+  createdAt: String(it?.createdAt ?? it?.publishedAt ?? new Date().toISOString()),
+  score: typeof it?.score === "number" ? it.score : Number(it?.score ?? 0),
+}));
+setItems(normalized);
+setLast(new Date().toISOString());
     // Translation status (shared cache).
     if (lang !== "en" && !meta?.translateEnabled) {
       setMsg(t(lang, "translateNeedsKey"));
