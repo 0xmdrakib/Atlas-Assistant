@@ -60,11 +60,9 @@ export async function POST(req: Request) {
         })
         .catch(() => null);
     } else if (isTranslateEnabled()) {
-      const translated = await translateItemBatch({
-        lang,
-        items: [{ title: item.title, summary: item.summary }],
-      });
-      const t0 = translated?.[0] || { title: item.title, summary: item.summary };
+      // translateItemBatch signature is (items, targetLang)
+      const translated = await translateItemBatch([{ id: item.id, title: item.title, summary: item.summary }], lang);
+      const t0 = translated?.[0] || { id: item.id, title: item.title, summary: item.summary };
       tr = await prisma.itemTranslation
         .create({ data: { itemId: id, lang, title: t0.title, summary: t0.summary } })
         .catch(() => null);
