@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { Section } from "@/lib/types";
@@ -36,7 +39,7 @@ export async function GET(req: NextRequest) {
   };
   if (section) where.section = section;
 
-  const items = await prisma.item.findMany({
+  const raw = await prisma.item.findMany({
     where,
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
     take: 250,
@@ -45,7 +48,11 @@ export async function GET(req: NextRequest) {
       section: true,
       title: true,
       summary: true,
+      aiSummary: true,
       url: true,
+      country: true,
+      topics: true,
+      score: true,
       publishedAt: true,
       createdAt: true,
       source: {
@@ -53,6 +60,22 @@ export async function GET(req: NextRequest) {
       },
     },
   });
+
+  // Shape items for the client (avoid nested objects and always include arrays).
+  const items = raw.map((it) => ({
+    id: it.id,
+    section: it.section as Section,
+    title: it.title,
+    summary: it.summary,
+    aiSummary: it.aiSummary ?? undefined,
+    sourceName: it.source?.name || "Unknown",
+    url: it.url,
+    country: it.country ?? undefined,
+    topics: Array.isArray(it.topics) ? it.topics : [],
+    publishedAt: it.publishedAt instanceof Date ? it.publishedAt.toISOString() : String(it.publishedAt),
+    createdAt: it.createdAt instanceof Date ? it.createdAt.toISOString() : String(it.createdAt),
+    score: typeof it.score === "number" ? it.score : Number(it.score || 0),
+  }));
 
   const translateEnabled = isTranslateEnabled();
 
@@ -97,7 +120,7 @@ export async function GET(req: NextRequest) {
     const withTranslations = items.map((it) => {
       const tr = byItemId.get(it.id);
       if (!tr) return it;
-      return { ...it, title: tr.title, summary: tr.summary };
+      return { ...it, title: tr.title, summary: tr.summary ?? it.summary };
     });
 
     return Response.json({
@@ -114,6 +137,8 @@ export async function GET(req: NextRequest) {
     meta: {
       updatedAt: new Date().toISOString(),
       translateEnabled,
-    },
+    }
+  }, {
+    headers: { "Cache-Control": "no-store" },
   });
 }
