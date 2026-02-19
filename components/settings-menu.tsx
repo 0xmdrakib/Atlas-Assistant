@@ -161,9 +161,16 @@ export function SettingsMenu() {
                           <button
                             key={L.code}
                             onClick={() => {
-                              setLang(L.code);
+                              const next = L.code;
+                              const changed = next !== lang;
+                              setLang(next);
                               setLangOpen(false);
                               setOpen(false);
+
+                              // Product requirement: language change should take effect immediately.
+                              // A lightweight full refresh is the most reliable way to ensure all
+                              // client caches/state re-request /api/items with the new lang.
+                              if (changed) setTimeout(() => window.location.reload(), 0);
                             }}
                             className={`w-full px-4 py-3 text-left transition focus-ring ${
                               active ? "bg-white/10" : "hover:bg-white/5"
