@@ -10,9 +10,6 @@ import { useLanguage } from "@/components/language-provider";
 import { SpeakButton } from "@/components/speak-button";
 
 type Days = 1 | 7;
-
-type Kind = "feed" | "ai";
-
 type DigestOutput = {
   overview: string;
   themes: string[];
@@ -30,13 +27,11 @@ export function Feed({ section }: { section: Section }) {
   const [country, setCountry] = React.useState("");
   const [topic, setTopic] = React.useState("");
   const [days, setDays] = React.useState<Days>(1);
-  const [kind, setKind] = React.useState<Kind>("feed");
 
   const [aiOpen, setAiOpen] = React.useState<Record<string, boolean>>({});
   const [aiLoading, setAiLoading] = React.useState<Record<string, boolean>>({});
 
   const [aiSummaryEnabled, setAiSummaryEnabled] = React.useState<boolean | null>(null);
-  const [aiSearchEnabled, setAiSearchEnabled] = React.useState<boolean | null>(null);
 
   const [digestOpen, setDigestOpen] = React.useState(false);
   const [digestLoading, setDigestLoading] = React.useState(false);
@@ -57,7 +52,6 @@ export function Feed({ section }: { section: Section }) {
     const qs = new URLSearchParams();
     qs.set("section", section);
     qs.set("days", String(days));
-    qs.set("kind", kind);
     qs.set("lang", lang);
     if (country) qs.set("country", country);
     if (topic) qs.set("topic", topic);
@@ -68,22 +62,16 @@ export function Feed({ section }: { section: Section }) {
 
     setItems(Array.isArray(json?.items) ? json.items : []);
     setLast(new Date().toISOString());
-
-    // Language gating (translation)
-    if (meta?.requiresLogin) {
-      setMsg(t(lang, "translateNeedsLogin"));
-      setLoginOpen(true);
-    } else if (lang !== "en" && !meta?.translateEnabled) {
-      // User is signed in but no AI key to translate
+    // Translation status (shared cache).
+    if (lang !== "en" && !meta?.translateEnabled) {
       setMsg(t(lang, "translateNeedsKey"));
     } else {
       setMsg("");
     }
 
-    if (aiSummaryEnabled === null || aiSearchEnabled === null) {
+    if (aiSummaryEnabled === null) {
       const s = await fetch(`/api/ai/status`, { cache: "no-store" }).then((r) => r.json());
       setAiSummaryEnabled(Boolean(s?.summaryEnabled));
-      setAiSearchEnabled(Boolean(s?.aiSearchEnabled));
     }
   }
 
@@ -98,7 +86,7 @@ export function Feed({ section }: { section: Section }) {
     setDigest(null);
     setDigestError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [section, country, topic, days, lang, kind]);
+  }, [section, country, topic, days, lang]);
 
   async function ensureDigest() {
     if (!aiSummaryEnabled) return;
@@ -112,7 +100,7 @@ export function Feed({ section }: { section: Section }) {
       const res = await fetch(`/api/ai/digest`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ section, kind, days, country: country || null, topic: topic || null, lang }),
+        body: JSON.stringify({ section, days, country: country || null, topic: topic || null, lang }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || `Digest failed (${res.status})`);
@@ -166,18 +154,13 @@ export function Feed({ section }: { section: Section }) {
         ? "Country + category + window • স্কোরিং + ক্যাপস দিয়ে কিউরেটেড"
         : "Country + category + window • curated by scoring + caps"
       : controlsHintBaseRaw;
-
-  const updatesKey = kind === "feed" ? "updatesEvery1h" : "updatesEvery12h";
-  const updatesHintRaw = kind === "feed" ? t(lang, "updatesEvery1h") : t(lang, "updatesEvery12h");
+  const updatesKey = "updatesEvery1h";
+  const updatesHintRaw = t(lang, "updatesEvery1h");
   const updatesHint =
     updatesHintRaw === updatesKey
       ? lang === "bn"
-        ? kind === "feed"
-          ? "প্রতি ১ ঘণ্টায় আপডেট"
-          : "প্রতি ১২ ঘণ্টায় আপডেট"
-        : kind === "feed"
-          ? "updates every 1 hour"
-          : "updates every 12 hours"
+        ? "প্রতি ১ ঘণ্টায় আপডেট"
+        : "updates every 1 hour"
       : updatesHintRaw;
 
   return (
@@ -221,20 +204,11 @@ export function Feed({ section }: { section: Section }) {
                 {t(lang, "lastLoaded")}: {last ? timeAgo(last) : "—"}
               </span>
               <span className="opacity-60">•</span>
-              <span>AI search: {aiSearchEnabled ? "ON" : "OFF"}</span>
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:items-end">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex flex-wrap items-center gap-2">
-                <Segmented
-                  value={kind}
-                  onChange={(v) => setKind(v)}
-                  options={[
-                    { value: "feed" as const, label: "Feed" },
-                    { value: "ai" as const, label: "AI" },
-                  ]}
-                />
 
                 <Segmented
                   value={days}
