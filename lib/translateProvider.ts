@@ -12,14 +12,9 @@ export type TranslatedItem = {
   summary: string;
 };
 
-function requiredEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing required env var: ${name}`);
-  return v;
-}
-
 export function isTranslateEnabled(): boolean {
-  return Boolean(process.env.AI_TRANSLATE_API_KEY);
+  // Support both the dedicated key and the common GEMINI_API_KEY name.
+  return Boolean(process.env.AI_TRANSLATE_API_KEY || process.env.GEMINI_API_KEY);
 }
 
 function languageForPrompt(lang: string): { label: string; nativeLabel?: string } {
@@ -50,8 +45,10 @@ function chunkByBudget(items: TranslatableItem[], maxItems: number, maxChars: nu
 }
 
 async function geminiTranslateChunk(items: TranslatableItem[], targetLang: string): Promise<TranslatedItem[]> {
-  const apiKey = requiredEnv("AI_TRANSLATE_API_KEY");
-  const model = process.env.AI_TRANSLATE_MODEL || "gemini-2.5-flash-lite";
+  const apiKey = process.env.AI_TRANSLATE_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Missing required env var: AI_TRANSLATE_API_KEY (or GEMINI_API_KEY)");
+
+  const model = process.env.AI_TRANSLATE_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
   const target = languageForPrompt(targetLang);
   const targetLabel = target.nativeLabel ? `${target.label} (${target.nativeLabel})` : target.label;
@@ -93,8 +90,9 @@ async function geminiTranslateChunk(items: TranslatableItem[], targetLang: strin
     generationConfig: {
       temperature: 0.2,
       maxOutputTokens: 4096,
-      response_mime_type: "application/json",
-      response_json_schema: schema,
+      // Use JSON mode + JSON Schema to force parseable output.
+      // The Gemini API accepts `responseMimeType` + `responseJsonSchema`.
+      // Docs: https://ai.google.dev/api/generate-content
       responseMimeType: "application/json",
       responseJsonSchema: schema,
     },
