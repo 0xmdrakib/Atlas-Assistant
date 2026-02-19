@@ -3,13 +3,13 @@ import { languageByCode } from "@/lib/i18n";
 export type TranslatableItem = {
   id: string;
   title: string;
-  summary: string | null;
+  summary: string;
 };
 
 export type TranslatedItem = {
   id: string;
   title: string;
-  summary: string | null;
+  summary: string;
 };
 
 function requiredEnv(name: string): string {
