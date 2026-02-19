@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Menu, Globe, Search, Check, ChevronUp } from "lucide-react";
+import { Menu, Globe, Search, Check, ChevronDown } from "lucide-react";
 import { Card, Button, Pill } from "@/components/ui";
 import { LANGUAGES, languageByCode } from "@/lib/i18n";
 import { useLanguage } from "@/components/language-provider";
@@ -19,6 +19,10 @@ export function SettingsMenu() {
   const [langOpen, setLangOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const ref = React.useRef<HTMLDivElement | null>(null);
+  const langBtnRef = React.useRef<HTMLButtonElement | null>(null);
+
+  const [langSide, setLangSide] = React.useState<"top" | "bottom">("bottom");
+  const [langMaxH, setLangMaxH] = React.useState(420);
 
   const current = languageByCode(lang) ?? { code: lang, label: lang, nativeLabel: lang, speechLang: lang };
 
@@ -46,6 +50,42 @@ export function SettingsMenu() {
   React.useEffect(() => {
     if (!open) setLangOpen(false);
   }, [open]);
+
+  const computeLangPlacement = React.useCallback(() => {
+    const el = langBtnRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    // Approx. header + padding + gap + list. Keep the list flexible via maxHeight.
+    const desiredListMax = 420;
+    const chrome = 56 /* search */ + 24 /* padding */ + 10 /* gap */;
+    const needed = chrome + desiredListMax;
+
+    const preferBottom = spaceBelow >= needed || spaceBelow >= spaceAbove;
+    const side: "top" | "bottom" = preferBottom ? "bottom" : "top";
+    setLangSide(side);
+
+    const available = preferBottom ? spaceBelow : spaceAbove;
+    const maxH = Math.max(220, Math.min(desiredListMax, available - chrome - 12));
+    setLangMaxH(maxH);
+  }, []);
+
+  React.useEffect(() => {
+    if (!langOpen) return;
+
+    computeLangPlacement();
+
+    const on = () => computeLangPlacement();
+    window.addEventListener("resize", on);
+    window.addEventListener("scroll", on, true);
+    return () => {
+      window.removeEventListener("resize", on);
+      window.removeEventListener("scroll", on, true);
+    };
+  }, [langOpen, computeLangPlacement]);
 
   return (
     <div className="relative" ref={ref}>
@@ -84,6 +124,7 @@ export function SettingsMenu() {
             <div className="pt-2 border-t border-soft">
               <div className="relative">
                 <button
+                  ref={langBtnRef}
                   onClick={() => setLangOpen((v) => !v)}
                   className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-white/5 px-3 py-2 text-sm transition focus-ring hover:bg-white/10"
                 >
@@ -91,11 +132,15 @@ export function SettingsMenu() {
                     <Globe size={16} />
                     <span className="truncate">{current.label}</span>
                   </span>
-                  <ChevronUp size={16} className={`transition ${langOpen ? "rotate-180" : ""}`} />
+                  <ChevronDown size={16} className={`transition ${langOpen ? "rotate-180" : ""}`} />
                 </button>
 
                 {langOpen ? (
-                  <div className="absolute right-0 bottom-[calc(100%+10px)] z-50 w-[340px] overflow-hidden rounded-2xl border border-soft bg-black/70 shadow-2xl backdrop-blur">
+                  <div
+                    className={`absolute right-0 z-50 w-[340px] overflow-hidden rounded-2xl border border-soft bg-black/70 shadow-2xl backdrop-blur ${
+                      langSide === "bottom" ? "top-[calc(100%+10px)]" : "bottom-[calc(100%+10px)]"
+                    }`}
+                  >
                     <div className="p-3 border-b border-soft">
                       <div className="flex items-center gap-2 rounded-xl border border-soft bg-white/5 px-3 py-2">
                         <Search size={16} className="text-muted" />
@@ -109,7 +154,7 @@ export function SettingsMenu() {
                       </div>
                     </div>
 
-                    <div className="max-h-[420px] overflow-auto">
+                    <div className="overflow-auto" style={{ maxHeight: langMaxH }}>
                       {filtered.map((L) => {
                         const active = L.code === lang;
                         return (
