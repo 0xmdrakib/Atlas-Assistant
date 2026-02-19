@@ -64,7 +64,7 @@ export async function POST(req: Request) {
       const translated = await translateItemBatch([{ id: item.id, title: item.title, summary: item.summary }], lang);
       const t0 = translated?.[0] || { id: item.id, title: item.title, summary: item.summary };
       tr = await prisma.itemTranslation
-        .create({ data: { itemId: id, lang, title: t0.title, summary: t0.summary } })
+        .create({ data: { itemId: id, lang, title: t0.title ?? item.title, summary: (t0.summary ?? item.summary ?? "") } })
         .catch(() => null);
     } else {
       // Translation server not configured; still allow summaries in the requested language.
