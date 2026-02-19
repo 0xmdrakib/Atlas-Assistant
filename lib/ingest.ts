@@ -1,6 +1,7 @@
 import Parser from "rss-parser";
 import { prisma } from "@/lib/prisma";
 import { SECTION_POLICIES } from "@/lib/section-policy";
+import { aiPickFeedCandidateIndex } from "@/lib/feedPicker";
 import seedSources from "../sources/seed-sources.json";
 
 type FeedItem = {
@@ -373,6 +374,7 @@ type SeedSource = {
 type IngestCandidate = {
   section: CanonicalSection;
   sourceId: string;
+  sourceName?: string | null;
   title: string;
   url: string;
   snippet: string;
@@ -877,6 +879,7 @@ export async function ingestOnce() {
         return {
           section: sec,
           sourceId: s.id,
+          sourceName: s.name || null,
           title,
           url,
           snippet,
@@ -912,6 +915,28 @@ export async function ingestOnce() {
     }
 
     addedThisRun[sec] = 0;
+
+    // Default picker: Gemini (optional). If it fails or is disabled, we fall back to the local score-sorted pool.
+    if (!fastMode) {
+      const aiIdx = await aiPickFeedCandidateIndex(
+        sec as any,
+        pool.map((c) => ({
+          title: c.title,
+          snippet: c.snippet,
+          url: c.url,
+          sourceName: (c as any).sourceName || null,
+          score: c.score,
+          publishedAt: c.publishedAt?.toISOString?.() || "",
+          country: c.country,
+          topics: c.topics,
+        }))
+      );
+
+      if (aiIdx !== null && aiIdx >= 0 && aiIdx < pool.length) {
+        const [chosen] = pool.splice(aiIdx, 1);
+        if (chosen) pool.unshift(chosen);
+      }
+    }
 
     for (const candidate of pool) {
       if (noRepeatHours > 0 && recentUrlBySection[sec].has(candidate.url)) continue;
