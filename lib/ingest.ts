@@ -374,7 +374,7 @@ type SeedSource = {
 type IngestCandidate = {
   section: CanonicalSection;
   sourceId: string;
-  sourceName?: string | null;
+  sourceName: string | null;
   title: string;
   url: string;
   snippet: string;
@@ -924,7 +924,7 @@ export async function ingestOnce() {
           title: c.title,
           snippet: c.snippet,
           url: c.url,
-          sourceName: (c as any).sourceName || null,
+          sourceName: c.sourceName ?? null,
           score: c.score,
           publishedAt: c.publishedAt?.toISOString?.() || "",
           country: c.country,
