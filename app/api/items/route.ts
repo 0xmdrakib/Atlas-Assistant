@@ -46,7 +46,6 @@ export async function GET(req: NextRequest) {
       title: true,
       summary: true,
       url: true,
-      imageUrl: true,
       publishedAt: true,
       createdAt: true,
       source: {
