@@ -14,16 +14,15 @@ type LanguageState = {
 const LanguageContext = React.createContext<LanguageState | null>(null);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = React.useState<LangCode>("en");
-
-  React.useEffect(() => {
+  // Read from localStorage during initial render to avoid a flash of "en" after refresh.
+  const [lang, setLangState] = React.useState<LangCode>(() => {
     try {
       const saved = localStorage.getItem("atlas:lang");
-      if (saved) setLangState(saved as LangCode);
+      return (saved as LangCode) || "en";
     } catch {
-      // ignore
+      return "en";
     }
-  }, []);
+  });
 
   const setLang = React.useCallback((next: LangCode) => {
     setLangState(next);
