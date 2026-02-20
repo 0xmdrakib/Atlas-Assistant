@@ -62,10 +62,17 @@ export async function POST(req: Request) {
     } else if (isTranslateEnabled()) {
       // translateItemBatch signature is (items, targetLang)
       const translated = await translateItemBatch([{ id: item.id, title: item.title, summary: item.summary }], lang);
-      const t0 = translated?.[0] || { id: item.id, title: item.title, summary: item.summary };
-      tr = await prisma.itemTranslation
-        .create({ data: { itemId: id, lang, title: t0.title ?? item.title, summary: (t0.summary ?? item.summary ?? "") } })
-        .catch(() => null);
+      const t0 = translated?.[0];
+      const sameTitle = String(t0?.title ?? "").trim() === String(item.title ?? "").trim();
+      const sameSummary = String(t0?.summary ?? "").trim() === String(item.summary ?? "").trim();
+
+      // Only cache successful translations. If we fall back to English here,
+      // do NOT create an ItemTranslation row (so /api/items can retry later).
+      if (t0?.ok && !(sameTitle && sameSummary)) {
+        tr = await prisma.itemTranslation
+          .create({ data: { itemId: id, lang, title: t0.title ?? item.title, summary: (t0.summary ?? item.summary ?? "") } })
+          .catch(() => null);
+      }
     } else {
       // Translation server not configured; still allow summaries in the requested language.
       tr = await prisma.itemTranslation
@@ -84,19 +91,25 @@ export async function POST(req: Request) {
   }
 
   const ai = await aiSummarizeItem({ title: tr?.title || item.title, snippet: tr?.summary || item.summary, url: item.url, lang });
-  await prisma.itemTranslation
-    .upsert({
-      where: { itemId_lang: { itemId: id, lang } },
-      create: {
-        itemId: id,
-        lang,
-        title: tr?.title || item.title,
-        summary: tr?.summary || item.summary,
-        aiSummary: ai,
-      },
-      update: { aiSummary: ai },
-    })
-    .catch(() => null);
+
+  // Only write to ItemTranslation when we already have a row for this language.
+  // If translation failed earlier (so `tr` is null), we still return the summary,
+  // but we avoid caching an English fallback under the target language.
+  if (tr) {
+    await prisma.itemTranslation
+      .upsert({
+        where: { itemId_lang: { itemId: id, lang } },
+        create: {
+          itemId: id,
+          lang,
+          title: tr?.title || item.title,
+          summary: tr?.summary || item.summary,
+          aiSummary: ai,
+        },
+        update: { aiSummary: ai },
+      })
+      .catch(() => null);
+  }
 
   return Response.json({ ok: true, aiSummary: ai, cached: false, remaining: quota.remaining });
 }
