@@ -29,6 +29,46 @@ function requiredEnv(name: string): string {
   return v;
 }
 
+function normalizeGeminiSummaryModel(modelFromEnv: string | undefined): string {
+  // Gemini 2.0 Flash is deprecated; auto-upgrade if still configured.
+  // Model code reference: gemini-3-flash-preview
+  const fallback = "gemini-3-flash-preview";
+  const m = (modelFromEnv || "").trim();
+  if (!m) return fallback;
+  if (m.startsWith("gemini-2.0-")) return fallback;
+  return m;
+}
+
+function stripAsterisksAndMarkdown(input: string): string {
+  // Make summaries TTS-friendly by removing markdown artifacts that cause
+  // "star/asterisk" to be spoken.
+  let s = String(input || "");
+
+  // Remove backticks.
+  s = s.replace(/`+/g, "");
+
+  // Remove markdown emphasis markers.
+  s = s.replace(/\*\*(.*?)\*\*/g, "$1");
+  s = s.replace(/\*(.*?)\*/g, "$1");
+
+  // Remove leading list markers on each line.
+  s = s
+    .split("\n")
+    .map((line) => line.replace(/^\s*[*•\-]\s+/, ""))
+    .join("\n");
+
+  // Remove any remaining asterisks.
+  s = s.replace(/\*/g, "");
+
+  // Collapse excessive blank lines.
+  s = s.replace(/\n{3,}/g, "\n\n");
+  return s.trim();
+}
+
+function sanitizeSingleLine(input: string): string {
+  return stripAsterisksAndMarkdown(input).replace(/\s+/g, " ").trim();
+}
+
 async function geminiGenerateText(args: {
   apiKey: string;
   model: string;
@@ -51,10 +91,7 @@ async function geminiGenerateText(args: {
     responseJsonSchema,
   } = args;
 
-  // Normalize model IDs in case env includes a "models/" prefix.
-  const normalizedModel = String(model || "").trim().replace(/^models\//, "");
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${normalizedModel}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const body: any = {
     contents: [{ parts: [{ text: prompt }] }],
@@ -68,10 +105,11 @@ async function geminiGenerateText(args: {
     body.systemInstruction = { parts: [{ text: systemInstruction }] };
   }
 
-  // Use the official REST field names from the Gemini API reference.
-  // Passing unknown fields can cause 400s, so keep this strict.
+  // Gemini REST uses lowerCamelCase field names for GenerationConfig.
+  // Keep the request strict: avoid sending duplicate/legacy fields, because
+  // they can cause the server to ignore structured output settings.
   if (responseMimeType) body.generationConfig.responseMimeType = responseMimeType;
-  if (responseJsonSchema) body.generationConfig.responseJsonSchema = responseJsonSchema;
+  if (responseJsonSchema) body.generationConfig._responseJsonSchema = responseJsonSchema;
 
   const res = await fetch(url, {
     method: "POST",
@@ -89,6 +127,42 @@ async function geminiGenerateText(args: {
     data?.candidates?.[0]?.output ||
     "";
   return String(text || "").trim();
+}
+
+function safeParseJson<T = any>(raw: string): T | null {
+  const attempt = (s: string): T | null => {
+    try {
+      return JSON.parse(s) as T;
+    } catch {
+      return null;
+    }
+  };
+
+  if (!raw) return null;
+  const direct = attempt(raw);
+  if (direct) return direct;
+
+  // Remove common wrappers (code fences / leading text).
+  let s = String(raw).trim();
+  s = s.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+
+  // Try extracting the first JSON object.
+  const o0 = s.indexOf("{");
+  const o1 = s.lastIndexOf("}");
+  if (o0 >= 0 && o1 > o0) {
+    const sub = attempt(s.slice(o0, o1 + 1));
+    if (sub) return sub;
+  }
+
+  // Try extracting the first JSON array.
+  const a0 = s.indexOf("[");
+  const a1 = s.lastIndexOf("]");
+  if (a0 >= 0 && a1 > a0) {
+    const sub = attempt(s.slice(a0, a1 + 1));
+    if (sub) return sub;
+  }
+
+  return null;
 }
 
 async function openaiChatCompletion(args: {
@@ -123,29 +197,37 @@ export async function aiSummarizeItem(args: {
 }): Promise<string> {
   const provider = getProvider("summary");
   const key = requiredEnv("AI_SUMMARY_API_KEY");
-  const model = process.env.AI_SUMMARY_MODEL || (provider === "gemini" ? "gemini-3-flash-preview" : "gpt-4o-mini");
+  const model =
+    provider === "gemini"
+      ? normalizeGeminiSummaryModel(process.env.AI_SUMMARY_MODEL)
+      : (process.env.AI_SUMMARY_MODEL || "gpt-4o-mini");
 
   const targetLang = langLabel(args.lang);
-  const prompt = `Summarize this item for a high-signal feed.
+  const prompt = `Write a professional, easy-to-skim summary for a high-signal feed.
 
 Output language: ${targetLang}
 
-Rules:
-- Use a numbered list ("1.", "2.", ...). No markdown bullets.
-- Do NOT use "*" or "•" or "-" as bullet markers.
-- 7–12 points (more detailed than a headline)
-- each point is 1–2 short sentences (keep it readable)
-- include concrete entities/places/numbers WHEN present in the input
-- include a final point starting exactly with "Why it matters:" (1–2 sentences)
-- stay factual, neutral, no hype, no emojis
-- do NOT invent facts; if unsure, write "unclear" and move on
+Strict rules:
+1) Plain text only. No markdown.
+2) Do NOT use bullet characters (*, -, •) and do NOT use asterisks for emphasis.
+3) Do not invent facts. If something is missing/unclear, write "unclear".
+4) Preserve key entities, locations, numbers, and timelines WHEN they appear in the input.
+
+Use this exact format:
+TLDR: <one sentence>
+Key points:
+1) <fact, 1 sentence>
+2) <fact, 1 sentence>
+3) <fact, 1 sentence>
+Context: <1-2 sentences>
+Why it matters: <1-2 sentences>
 
 TITLE: ${args.title}
 SNIPPET: ${args.snippet || ""}
 URL: ${args.url}`;
 
   if (provider === "openai") {
-    return openaiChatCompletion({
+    const out = await openaiChatCompletion({
       apiKey: key,
       model,
       messages: [
@@ -155,9 +237,11 @@ URL: ${args.url}`;
       temperature: 0.2,
       max_tokens: 560,
     });
+
+    return stripAsterisksAndMarkdown(out);
   }
 
-  return geminiGenerateText({
+  const out = await geminiGenerateText({
     apiKey: key,
     model,
     prompt,
@@ -165,6 +249,8 @@ URL: ${args.url}`;
     temperature: 0.2,
     maxOutputTokens: 720,
   });
+
+  return stripAsterisksAndMarkdown(out);
 }
 
 export type DigestOutput = {
@@ -185,7 +271,10 @@ export async function aiDigest(args: {
 }): Promise<string> {
   const provider = getProvider("summary");
   const key = requiredEnv("AI_SUMMARY_API_KEY");
-  const model = process.env.AI_SUMMARY_MODEL || (provider === "gemini" ? "gemini-3-flash-preview" : "gpt-4o-mini");
+  const model =
+    provider === "gemini"
+      ? normalizeGeminiSummaryModel(process.env.AI_SUMMARY_MODEL)
+      : (process.env.AI_SUMMARY_MODEL || "gpt-4o-mini");
 
   const targetLang = langLabel(args.lang);
   const itemCount = args.items.length;
@@ -201,6 +290,10 @@ Output language: ${targetLang}
 
 Rules:
 
+- Digest MUST reflect the selected time window (last ${args.days} day(s)).
+- Use ONLY the provided items; do not invent stories.
+- Plain text in JSON values (no markdown, no asterisks, no bullet prefixes).
+
 Return ONLY JSON using this schema:
 {
   "overview": string,
@@ -212,29 +305,37 @@ Return ONLY JSON using this schema:
 
 Guidelines:
 
-Formatting rules (important):
-- Return ONLY valid JSON (no markdown fences).
-- Each array element must be a plain sentence and MUST NOT start with bullet markers.
-- Do NOT start items with "*", "-", "•", or numbering like "1)".
-- Keep everything factual and grounded in the provided items.
-
 Dynamic sizing rules:
 - If itemCount < 8, keep highlights <= 6 and themes <= 4.
 - If itemCount is between 8 and 18, use the normal ranges.
 - If itemCount > 18, cap highlights at 12 and keep everything skimmable.
 
 Normal ranges (when itemCount is 8-18):
+
 - overview: 4-7 short sentences (still skimmable)
-- themes: 4-7 bullets
-- highlights: 8-14 bullets (1 sentence each)
-- whyItMatters: 3-6 bullets
-- watchlist: 3-6 bullets
+- themes: 4-7 entries
+- highlights: 8-14 entries (1 sentence each)
+- whyItMatters: 3-6 entries
+- watchlist: 3-6 entries
+
+Tone + formatting requirements (important for voice mode):
+- No markdown (no '*', no '**', no leading '-' or '•').
+- Each array entry must be a single sentence or short phrase and MUST NOT start with punctuation.
+- Keep it factual, neutral, and easy to understand.
 
 Items:
 ${args.items
   .slice(0, 25)
   .map((i, idx) => `${idx + 1}. [${i.sourceName}] ${i.title} (${i.url})`)
   .join("\n")}`;
+
+  const normalizeDigest = (parsed: any): DigestOutput => ({
+    overview: stripAsterisksAndMarkdown(parsed?.overview || ""),
+    themes: (parsed?.themes || []).map(sanitizeSingleLine).filter(Boolean),
+    highlights: (parsed?.highlights || []).map(sanitizeSingleLine).filter(Boolean),
+    whyItMatters: (parsed?.whyItMatters || []).map(sanitizeSingleLine).filter(Boolean),
+    watchlist: (parsed?.watchlist || []).map(sanitizeSingleLine).filter(Boolean),
+  });
 
   if (provider === "openai") {
     const out = await openaiChatCompletion({
@@ -248,9 +349,8 @@ ${args.items
       max_tokens: 1100,
     });
 
-    // validate JSON (will throw if invalid)
-    JSON.parse(out);
-    return out;
+    const parsed = safeParseJson<any>(out);
+    return JSON.stringify(normalizeDigest(parsed || { overview: out }));
   }
 
   const out = await geminiGenerateText({
@@ -274,9 +374,8 @@ ${args.items
     },
   });
 
-  // Ensure valid JSON
-  JSON.parse(out);
-  return out;
+  const parsed = safeParseJson<any>(out);
+  return JSON.stringify(normalizeDigest(parsed || { overview: out }));
 }
 
 export async function aiTranslateBatch(args: {
