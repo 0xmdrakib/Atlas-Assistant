@@ -9,7 +9,9 @@ import { SettingsMenu } from "@/components/settings-menu";
 import { useLanguage } from "@/components/language-provider";
 
 const tabs = [
-  { href: "/global", labelKey: "tabGlobal" as const, icon: Globe },
+  // Global is the default tab, and is served at the root path ("/").
+  // We still keep /global as a valid direct URL (handled by app/global).
+  { href: "/", labelKey: "tabGlobal" as const, icon: Globe },
   { href: "/tech", labelKey: "tabTech" as const, icon: Cpu },
   { href: "/innovators", labelKey: "tabInnovators" as const, icon: Lightbulb },
   { href: "/early", labelKey: "tabEarly" as const, icon: Radar },
@@ -50,7 +52,10 @@ export function TabShell({ children }: { children: React.ReactNode }) {
 
       <nav className="mb-6 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2">
         {tabs.map((tab) => {
-          const active = pathname === tab.href;
+          const active =
+            pathname === tab.href ||
+            // Treat /global as the same as root for highlighting Global.
+            (tab.href === "/" && (pathname === "/" || pathname === "/global"));
           const Icon = tab.icon;
           return (
             <Link
