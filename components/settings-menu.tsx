@@ -7,6 +7,11 @@ import { LANGUAGES, languageByCode } from "@/lib/i18n";
 import { useLanguage } from "@/components/language-provider";
 import { useTheme } from "next-themes";
 
+const UI_CACHE_VER = "1";
+function uiCacheKey(lang: string) {
+  return `atlas:ui:${lang}:v${UI_CACHE_VER}`;
+}
+
 function normalize(s: string) {
   return s.toLowerCase().trim();
 }
@@ -25,6 +30,26 @@ export function SettingsMenu() {
   const [langMaxH, setLangMaxH] = React.useState(420);
 
   const current = languageByCode(lang) ?? { code: lang, label: lang, nativeLabel: lang, speechLang: lang };
+
+  const prefetchUiTranslations = React.useCallback(async (target: string) => {
+    // en & bn are bundled; others are fetched once and cached in localStorage.
+    if (!target || target === "en" || target === "bn") return;
+    try {
+      if (localStorage.getItem(uiCacheKey(target))) return;
+      const r = await fetch("/api/ui/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lang: target }),
+      });
+      if (!r.ok) return;
+      const data = await r.json().catch(() => null);
+      if (data?.ok && data?.strings && typeof data.strings === "object") {
+        localStorage.setItem(uiCacheKey(target), JSON.stringify(data.strings));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const filtered = React.useMemo(() => {
     const q = normalize(query);
@@ -147,7 +172,7 @@ export function SettingsMenu() {
                         <input
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
-                          placeholder="Search language…"
+                          placeholder={t(lang, "searchLanguage")}
                           className="w-full bg-transparent text-sm outline-none placeholder:text-muted"
                           autoFocus
                         />
@@ -160,9 +185,14 @@ export function SettingsMenu() {
                         return (
                           <button
                             key={L.code}
-                            onClick={() => {
+                            onClick={async () => {
                               const next = L.code;
                               const changed = next !== lang;
+
+                              // Fetch UI strings for the target language (if needed) BEFORE refresh.
+                              // This makes the post-refresh UI immediately render in the selected language.
+                              if (changed) await prefetchUiTranslations(next);
+
                               setLang(next);
                               setLangOpen(false);
                               setOpen(false);
@@ -187,15 +217,11 @@ export function SettingsMenu() {
                         );
                       })}
                       {filtered.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-muted">No results.</div>
+                        <div className="px-4 py-3 text-sm text-muted">{t(lang, "noResults")}</div>
                       ) : null}
                     </div>
                   </div>
                 ) : null}
-              </div>
-
-              <div className="mt-2 text-xs text-muted">
-                UI text uses built-in translations. Feed content, summaries, and digests translate via Gemini when enabled.
               </div>
             </div>
           </div>
