@@ -92,29 +92,42 @@ export async function GET(req: NextRequest) {
     const missing = items.filter((it) => !byItemId.has(it.id));
 
     if (missing.length > 0) {
-      const translated = await translateItemBatch(
-        missing.map((m) => ({ id: m.id, title: m.title, summary: m.summary })),
-        lang
-      );
+      const input = missing.map((m) => ({ id: m.id, title: m.title, summary: m.summary }));
+      const inputById = new Map(input.map((x) => [x.id, x]));
 
-      // Upsert translations (shared cache across users).
-      await prisma.$transaction(
-        translated.map((t) =>
-          prisma.itemTranslation.upsert({
-            where: { itemId_lang: { itemId: t.id, lang } },
-            update: { title: t.title, summary: t.summary ?? "" },
-            create: { itemId: t.id, lang, title: t.title, summary: t.summary ?? "" },
-          })
-        )
-      );
+      const translated = await translateItemBatch(input, lang);
 
-      // Refresh cache map.
-      const again = await prisma.itemTranslation.findMany({
-        where: { itemId: { in: ids }, lang },
-        select: { itemId: true, title: true, summary: true },
+      // Only cache successful translations. If the model fails and we fall back to English,
+      // we DO NOT write anything to the DB so a later request can retry.
+      const toUpsert = translated.filter((t) => {
+        if (!t.ok) return false;
+        const src = inputById.get(t.id);
+        if (!src) return false;
+        const sameTitle = String(t.title ?? "").trim() === String(src.title ?? "").trim();
+        const sameSummary = String(t.summary ?? "").trim() === String(src.summary ?? "").trim();
+        return !(sameTitle && sameSummary);
       });
-      byItemId.clear();
-      for (const t of again) byItemId.set(t.itemId, t);
+
+      if (toUpsert.length > 0) {
+        // Upsert translations (shared cache across users).
+        await prisma.$transaction(
+          toUpsert.map((t) =>
+            prisma.itemTranslation.upsert({
+              where: { itemId_lang: { itemId: t.id, lang } },
+              update: { title: t.title, summary: t.summary ?? "" },
+              create: { itemId: t.id, lang, title: t.title, summary: t.summary ?? "" },
+            })
+          )
+        );
+
+        // Refresh cache map.
+        const again = await prisma.itemTranslation.findMany({
+          where: { itemId: { in: ids }, lang },
+          select: { itemId: true, title: true, summary: true },
+        });
+        byItemId.clear();
+        for (const t of again) byItemId.set(t.itemId, t);
+      }
     }
 
     const withTranslations = items.map((it) => {
