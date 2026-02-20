@@ -130,34 +130,39 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: "Daily AI limit reached", remaining: quota.remaining }, { status: 429 });
   }
 
-  const digestJson = await aiDigest({
-    section,
-    days,
-    country,
-    topic,
-    lang,
-    items: items.map((it) => ({
-      title: it.title,
-      sourceName: kind === "ai" ? aiProviderName(it.url) || it.source.name : it.source.name,
-      url: it.url,
-    })),
-  });
-
-  let parsed: any;
   try {
-    parsed = JSON.parse(digestJson);
-  } catch {
-    parsed = { overview: digestJson, themes: [], highlights: [], whyItMatters: [], watchlist: [] };
+    const digestJson = await aiDigest({
+      section,
+      days,
+      country,
+      topic,
+      lang,
+      items: items.map((it) => ({
+        title: it.title,
+        sourceName: kind === "ai" ? aiProviderName(it.url) || it.source.name : it.source.name,
+        url: it.url,
+      })),
+    });
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(digestJson);
+    } catch {
+      parsed = { overview: digestJson, themes: [], highlights: [], whyItMatters: [], watchlist: [] };
+    }
+
+    // Upsert and refresh the TTL by setting createdAt to now.
+    await prisma.digest
+      .upsert({
+        where: { cacheKey: key },
+        create: { cacheKey: key, section, days, country, topic, summary: digestJson },
+        update: { summary: digestJson, section, days, country, topic, createdAt: new Date() },
+      })
+      .catch(() => null);
+
+    return Response.json({ ok: true, digest: parsed, cached: false, remaining: quota.remaining });
+  } catch (e: any) {
+    const msg = e?.message ? String(e.message) : "AI digest failed";
+    return Response.json({ ok: false, error: msg, remaining: quota.remaining }, { status: 500 });
   }
-
-  // Upsert and refresh the TTL by setting createdAt to now.
-  await prisma.digest
-    .upsert({
-      where: { cacheKey: key },
-      create: { cacheKey: key, section, days, country, topic, summary: digestJson },
-      update: { summary: digestJson, section, days, country, topic, createdAt: new Date() },
-    })
-    .catch(() => null);
-
-  return Response.json({ ok: true, digest: parsed, cached: false, remaining: quota.remaining });
 }
