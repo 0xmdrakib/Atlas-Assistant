@@ -41,7 +41,9 @@ export async function GET(req: NextRequest) {
 
   const raw = await prisma.item.findMany({
     where,
-    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+    // UI label is "collected X ago" (createdAt). Sort by createdAt so newer
+    // collected items always appear at the top.
+    orderBy: [{ createdAt: "desc" }, { score: "desc" }],
     take: 250,
     select: {
       id: true,
