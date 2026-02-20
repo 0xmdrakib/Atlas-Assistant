@@ -404,6 +404,9 @@ const DICT: Dict = {
     tabUniverse: "Universe",
     tabHistory: "History",
     tabFaith: "Faith",
+
+    searchLanguage: "Search language…",
+    noResults: "No results.",
   },
   bn: {
     atlasAssistant: "অ্যাটলাস অ্যাসিস্ট্যান্ট",
@@ -454,8 +457,16 @@ const DICT: Dict = {
     tabUniverse: "মহাবিশ্ব",
     tabHistory: "ইতিহাস",
     tabFaith: "ঈমান",
+
+    searchLanguage: "ল্যাঙ্গুয়েজ সার্চ…",
+    noResults: "কিছুই পাওয়া যায়নি।",
   },
 };
+
+// Base English UI strings (used for dynamic UI translation).
+export const UI_EN = DICT.en;
+export type UiKey = keyof typeof DICT.en;
+export const UI_KEYS = Object.keys(DICT.en) as UiKey[];
 
 export function t(lang: string, key: keyof (typeof DICT)["en"]): string {
   const l = (lang || "en").toLowerCase();
