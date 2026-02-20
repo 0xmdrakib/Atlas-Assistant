@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { LangCode } from "@/lib/i18n";
-import { t as translate, getSpeechLang } from "@/lib/i18n";
+import { t as translate, getSpeechLang, languageByCode } from "@/lib/i18n";
 
 type LanguageState = {
   lang: LangCode;
@@ -18,7 +18,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = React.useState<LangCode>(() => {
     try {
       const saved = localStorage.getItem("atlas:lang");
-      return (saved as LangCode) || "en";
+      const candidate = (saved as LangCode) || "en";
+      return languageByCode(candidate) ? candidate : "en";
     } catch {
       return "en";
     }
