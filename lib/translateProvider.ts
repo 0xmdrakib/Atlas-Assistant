@@ -10,6 +10,8 @@ export type TranslatedItem = {
   id: string;
   title: string;
   summary: string;
+  // Whether the translation came from the model (vs fallback).
+  ok: boolean;
 };
 
 export function isTranslateEnabled(): boolean {
@@ -123,7 +125,7 @@ async function geminiTranslateChunk(items: TranslatableItem[], targetLang: strin
 
   if (!Array.isArray(parsed)) throw new Error("Gemini translate returned non-array JSON");
 
-  const out: TranslatedItem[] = parsed.map((x: any) => ({
+  const out: Omit<TranslatedItem, "ok">[] = parsed.map((x: any) => ({
     id: String(x.id),
     title: String(x.title ?? ""),
     summary: String(x.summary ?? ""),
@@ -133,17 +135,16 @@ async function geminiTranslateChunk(items: TranslatableItem[], targetLang: strin
   const byId = new Map(out.map((o) => [o.id, o]));
   return items.map((it) => {
     const got = byId.get(it.id);
-    return got
-      ? { id: it.id, title: got.title, summary: got.summary }
-      : { id: it.id, title: it.title, summary: it.summary };
+    if (!got) return { id: it.id, title: it.title, summary: it.summary ?? "", ok: false };
+    return { id: it.id, title: got.title, summary: got.summary ?? "", ok: true };
   });
 }
 
 export async function translateItemBatch(items: TranslatableItem[], targetLang: string): Promise<TranslatedItem[]> {
-  if (!isTranslateEnabled()) return items.map((it) => ({ ...it, summary: it.summary ?? "" }));
+  if (!isTranslateEnabled()) return items.map((it) => ({ ...it, summary: it.summary ?? "", ok: false }));
 
   // If the target is English, no work needed.
-  if (targetLang === "en") return items.map((it) => ({ ...it, summary: it.summary ?? "" }));
+  if (targetLang === "en") return items.map((it) => ({ ...it, summary: it.summary ?? "", ok: false }));
 
   const maxItems = Number(process.env.AI_TRANSLATE_BATCH_SIZE || 16);
   const maxChars = Number(process.env.AI_TRANSLATE_MAX_CHARS || 12000);
@@ -157,7 +158,7 @@ export async function translateItemBatch(items: TranslatableItem[], targetLang: 
       translated.push(...out);
     } catch (err) {
       console.error("translateItemBatch chunk failed", err);
-      translated.push(...chunk.map((it) => ({ id: it.id, title: it.title, summary: it.summary ?? "" })));
+      translated.push(...chunk.map((it) => ({ id: it.id, title: it.title, summary: it.summary ?? "", ok: false })));
     }
   }
   return translated;
