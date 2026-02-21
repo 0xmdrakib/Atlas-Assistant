@@ -79,6 +79,21 @@ export async function GET(req: NextRequest) {
     score: typeof it.score === "number" ? it.score : Number(it.score || 0),
   }));
 
+  async function attachAiSummaries(list: typeof items, lang: string) {
+    const ids = list.map((i) => i.id);
+    if (ids.length === 0) return list;
+
+    const trs = await prisma.itemTranslation
+      .findMany({
+        where: { itemId: { in: ids }, lang },
+        select: { itemId: true, aiSummary: true },
+      })
+      .catch(() => [] as { itemId: string; aiSummary: string | null }[]);
+
+    const byId = new Map(trs.map((t) => [t.itemId, t.aiSummary ?? undefined]));
+    return list.map((it) => ({ ...it, aiSummary: byId.get(it.id) ?? it.aiSummary }));
+  }
+
   const translateEnabled = isTranslateEnabled();
 
   // Apply shared translation cache when requested.
@@ -138,8 +153,10 @@ export async function GET(req: NextRequest) {
       return { ...it, title: tr.title, summary: tr.summary ?? it.summary };
     });
 
+    const withAi = await attachAiSummaries(withTranslations, lang);
+
     return Response.json({
-      items: withTranslations,
+      items: withAi,
       meta: {
         updatedAt: new Date().toISOString(),
         translateEnabled: true,
@@ -149,8 +166,10 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  const withAi = await attachAiSummaries(items, lang);
+
   return Response.json({
-    items,
+    items: withAi,
     meta: {
       updatedAt: new Date().toISOString(),
       translateEnabled,
