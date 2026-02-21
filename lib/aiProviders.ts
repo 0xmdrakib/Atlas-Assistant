@@ -77,7 +77,12 @@ async function geminiGenerateText(args: {
   temperature?: number;
   maxOutputTokens?: number;
   // Structured output (optional)
+  // Gemini REST supports TWO schema mechanisms:
+  // - generationConfig.responseSchema (OpenAPI-ish Schema message)
+  // - generationConfig.responseJsonSchema (JSON Schema subset)
+  // We use responseJsonSchema because our schemas are authored as JSON Schema.
   responseMimeType?: string;
+  responseSchema?: unknown;
   responseJsonSchema?: unknown;
 }): Promise<string> {
   const {
@@ -88,6 +93,7 @@ async function geminiGenerateText(args: {
     temperature = 0.2,
     maxOutputTokens = 500,
     responseMimeType,
+    responseSchema,
     responseJsonSchema,
   } = args;
 
@@ -109,7 +115,13 @@ async function geminiGenerateText(args: {
   // Keep the request strict: avoid sending duplicate/legacy fields, because
   // they can cause the server to ignore structured output settings.
   if (responseMimeType) body.generationConfig.responseMimeType = responseMimeType;
-  if (responseJsonSchema) body.generationConfig.responseSchema = responseJsonSchema;
+
+  // IMPORTANT:
+  // If you want JSON Schema (with keywords like additionalProperties), send it via
+  // responseJsonSchema. If you want the protobuf Schema message, use responseSchema.
+  // Never set both.
+  if (responseJsonSchema) body.generationConfig.responseJsonSchema = responseJsonSchema;
+  else if (responseSchema) body.generationConfig.responseSchema = responseSchema;
 
   const res = await fetch(url, {
     method: "POST",
@@ -213,6 +225,9 @@ Strict rules:
 2) Do NOT use bullet characters (*, -, •) and do NOT use asterisks for emphasis.
 3) Do not invent facts. If something is missing/unclear, write "unclear".
 4) Preserve key entities, locations, numbers, and timelines WHEN they appear in the input.
+5) KEEP THESE SECTION LABELS IN ENGLISH EXACTLY (do not translate):
+   "TLDR:", "Key points:", "Context:", "Why it matters:".
+6) Minimum content: TLDR + 4 key points + Context + Why it matters. Do not return only TLDR.
 
 Use this exact format:
 TLDR: <one sentence>
@@ -220,6 +235,7 @@ Key points:
 1) <fact, 1 sentence>
 2) <fact, 1 sentence>
 3) <fact, 1 sentence>
+4) <fact, 1 sentence>
 Context: <1-2 sentences>
 Why it matters: <1-2 sentences>
 
@@ -236,7 +252,7 @@ URL: ${args.url}`;
         { role: "user", content: prompt },
       ],
       temperature: 0.2,
-      max_tokens: 560,
+      max_tokens: 900,
     });
 
     return stripAsterisksAndMarkdown(out);
@@ -248,7 +264,7 @@ URL: ${args.url}`;
     prompt,
     systemInstruction: "You write compact, factual summaries.",
     temperature: 0.2,
-    maxOutputTokens: 720,
+    maxOutputTokens: 1000,
   });
 
   return stripAsterisksAndMarkdown(out);
