@@ -43,6 +43,7 @@ function extractKeyPointsFromSummary(summary: string): string[] {
     .map((l) => l.replace(/^\d+\s*[\).:-]\s*/, ""))
     .filter((l) => l.length >= 8)
     .slice(0, 8);
+}
 
 function stripKeyPointsFromSummary(summary: string): string {
   const s = String(summary || "");
@@ -59,10 +60,7 @@ function stripKeyPointsFromSummary(summary: string): string {
   const tailLower = tail.toLowerCase();
 
   // Prefer Context/Why it matters if present.
-  const stopMarkers = ["
-context:", "
-why it matters:", "
-tldr:"];
+  const stopMarkers = ["\ncontext:", "\nwhy it matters:", "\ntldr:"];
   let stop = tail.length;
   for (const m of stopMarkers) {
     const j = tailLower.indexOf(m);
@@ -70,12 +68,9 @@ tldr:"];
   }
 
   const before = s.slice(0, start).trimEnd();
-  const after = tail.slice(stop).trimStart();
-  const out = [before, after].filter(Boolean).join("
-");
+  const afterText = tail.slice(stop).trimStart();
+  const out = [before, afterText].filter(Boolean).join("\n");
   return out.trim();
-}
-
 }
 
 export function Feed({ section }: { section: Section }) {
