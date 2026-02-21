@@ -239,7 +239,7 @@ setLast(new Date().toISOString());
   return (
     <div className="space-y-4">
       {loginOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[hsl(var(--backdrop)/.70)] p-4">
           <Card className="w-full max-w-md p-5">
             <div className="text-base font-semibold">{t(lang, "signInTitle")}</div>
             <div className="mt-1 text-sm text-muted">{t(lang, "signInBody")}</div>
@@ -315,13 +315,13 @@ setLast(new Date().toISOString());
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 placeholder={t(lang, "countryPlaceholder")}
-                className="w-full rounded-xl border border-soft bg-black/10 px-3 py-2 text-sm text-[hsl(var(--fg))] placeholder:text-muted focus-ring sm:w-44"
+                className="w-full rounded-xl border border-soft bg-wash-35 px-3 py-2 text-sm text-[hsl(var(--fg))] placeholder:text-muted focus-ring sm:w-44"
               />
               <input
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 placeholder={t(lang, "categoryPlaceholder")}
-                className="w-full rounded-xl border border-soft bg-black/10 px-3 py-2 text-sm text-[hsl(var(--fg))] placeholder:text-muted focus-ring sm:w-52"
+                className="w-full rounded-xl border border-soft bg-wash-35 px-3 py-2 text-sm text-[hsl(var(--fg))] placeholder:text-muted focus-ring sm:w-52"
               />
             </div>
 
@@ -347,7 +347,7 @@ setLast(new Date().toISOString());
             ) : null}
           </div>
 
-          <div className="mt-3 rounded-2xl border border-soft bg-black/20 p-4">
+          <div className="mt-3 rounded-2xl border border-soft bg-wash-55 p-4">
             {digestLoading ? (
               <div className="text-sm text-muted">{t(lang, "generating")}</div>
             ) : digestError ? (
@@ -448,7 +448,7 @@ ${keyPoints.map((p, i) => `${i + 1}) ${p}`).join("\n")}`
                 </div>
 
                 {open ? (
-                  <div className="mt-3 rounded-2xl border border-soft bg-black/10 p-3">
+                  <div className="mt-3 rounded-2xl border border-soft bg-wash-35 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs font-medium text-muted">{t(lang, "itemSummary")}</div>
                       {it.aiSummary ? (
@@ -465,7 +465,7 @@ ${keyPoints.map((p, i) => `${i + 1}) ${p}`).join("\n")}`
                     </div>
 
                     {it.aiSummary && keyPoints.length ? (
-                      <div className="mt-3 rounded-xl border border-soft bg-black/5 px-3 py-2">
+                      <div className="mt-3 rounded-xl border border-soft bg-wash-20 px-3 py-2">
                         <div className="text-xs font-medium text-muted">{t(lang, "keyPoints")}</div>
                         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
                           {keyPoints.map((p, idx) => (
