@@ -20,6 +20,12 @@ type Kind = "feed" | "ai";
 
 const DIGEST_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+function singleFlightMap(): Map<string, Promise<any>> {
+  const g = globalThis as any;
+  if (!g.__atlasSingleFlight) g.__atlasSingleFlight = new Map();
+  return g.__atlasSingleFlight as Map<string, Promise<any>>;
+}
+
 function enabled() {
   return (
     String(process.env.AI_SUMMARY_ENABLED || "false").toLowerCase() === "true" &&
@@ -125,47 +131,83 @@ export async function POST(req: Request) {
     }
   }
 
-  const quota = await enforceAndIncrementAiUsage({ userId, kind: "digest" });
-  if (!quota.ok) {
-    return Response.json({ ok: false, error: "Daily AI limit reached", remaining: quota.remaining }, { status: 429 });
+  // Single-flight: if multiple users click at the same time for the same cache key,
+  // only one request generates and writes to DB; others await the same result.
+  const lockKey = `digest:${key}`;
+  const locks = singleFlightMap();
+  const existing = locks.get(lockKey);
+  if (existing) {
+    const payload = await existing;
+    const status = typeof payload?._status === "number" ? payload._status : 200;
+    if (payload && typeof payload === "object" && "_status" in payload) delete (payload as any)._status;
+    return Response.json(payload, { status });
   }
 
-  let digestJson = "";
+  const p = (async () => {
+    // Re-check cache inside the lock to avoid a race.
+    const again = await prisma.digest.findUnique({ where: { cacheKey: key } }).catch(() => null);
+    if (again && again.createdAt >= cutoff) {
+      try {
+        const parsed = JSON.parse(again.summary);
+        return { ok: true, digest: parsed, cached: true };
+      } catch {
+        return {
+          ok: true,
+          digest: { overview: again.summary, themes: [], highlights: [], whyItMatters: [], watchlist: [] },
+          cached: true,
+        };
+      }
+    }
+
+    const quota = await enforceAndIncrementAiUsage({ userId, kind: "digest" });
+    if (!quota.ok) {
+      return { ok: false, error: "Daily AI limit reached", remaining: quota.remaining, _status: 429 };
+    }
+
+    let digestJson = "";
+    try {
+      digestJson = await aiDigest({
+        section,
+        days,
+        country,
+        topic,
+        lang,
+        items: items.map((it) => ({
+          title: it.title,
+          sourceName: kind === "ai" ? aiProviderName(it.url) || it.source.name : it.source.name,
+          url: it.url,
+        })),
+      });
+    } catch (e: any) {
+      return { ok: false, error: e?.message || "Digest generation failed", remaining: quota.remaining, _status: 500 };
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(digestJson);
+    } catch {
+      parsed = { overview: digestJson, themes: [], highlights: [], whyItMatters: [], watchlist: [] };
+    }
+
+    // Cache only successful generations.
+    await prisma.digest
+      .upsert({
+        where: { cacheKey: key },
+        create: { cacheKey: key, section, days, country, topic, summary: digestJson },
+        update: { summary: digestJson, section, days, country, topic, createdAt: new Date() },
+      })
+      .catch(() => null);
+
+    return { ok: true, digest: parsed, cached: false, remaining: quota.remaining };
+  })();
+
+  locks.set(lockKey, p);
   try {
-    digestJson = await aiDigest({
-      section,
-      days,
-      country,
-      topic,
-      lang,
-      items: items.map((it) => ({
-        title: it.title,
-        sourceName: kind === "ai" ? aiProviderName(it.url) || it.source.name : it.source.name,
-        url: it.url,
-      })),
-    });
-  } catch (e: any) {
-    return Response.json(
-      { ok: false, error: e?.message || "Digest generation failed", remaining: quota.remaining },
-      { status: 500 }
-    );
+    const payload = await p;
+    const status = typeof payload?._status === "number" ? payload._status : 200;
+    if (payload && typeof payload === "object" && "_status" in payload) delete (payload as any)._status;
+    return Response.json(payload, { status });
+  } finally {
+    locks.delete(lockKey);
   }
-
-  let parsed: any;
-  try {
-    parsed = JSON.parse(digestJson);
-  } catch {
-    parsed = { overview: digestJson, themes: [], highlights: [], whyItMatters: [], watchlist: [] };
-  }
-
-  // Upsert and refresh the TTL by setting createdAt to now.
-  await prisma.digest
-    .upsert({
-      where: { cacheKey: key },
-      create: { cacheKey: key, section, days, country, topic, summary: digestJson },
-      update: { summary: digestJson, section, days, country, topic, createdAt: new Date() },
-    })
-    .catch(() => null);
-
-  return Response.json({ ok: true, digest: parsed, cached: false, remaining: quota.remaining });
 }
