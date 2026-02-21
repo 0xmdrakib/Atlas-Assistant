@@ -20,6 +20,16 @@ type Kind = "feed" | "ai";
 
 const DIGEST_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+
+function isValidDigest(d: any): boolean {
+  if (!d || typeof d !== "object") return false;
+  const overviewOk = typeof d.overview === "string" && d.overview.trim().length >= 16;
+  const arraysOk = ["themes", "highlights", "whyItMatters", "watchlist"].some(
+    (k) => Array.isArray((d as any)[k]) && (d as any)[k].length > 0
+  );
+  return overviewOk && arraysOk;
+}
+
 function singleFlightMap(): Map<string, Promise<any>> {
   const g = globalThis as any;
   if (!g.__atlasSingleFlight) g.__atlasSingleFlight = new Map();
@@ -121,15 +131,17 @@ export async function POST(req: Request) {
   if (cached && cached.createdAt >= cutoff) {
     try {
       const parsed = JSON.parse(cached.summary);
-      return Response.json({ ok: true, digest: parsed, cached: true });
+      if (isValidDigest(parsed)) {
+        return Response.json({ ok: true, digest: parsed, cached: true });
+      }
     } catch {
-      return Response.json({
-        ok: true,
-        digest: { overview: cached.summary, themes: [], highlights: [], whyItMatters: [], watchlist: [] },
-        cached: true,
-      });
+      // fall through
     }
+
+    // Cached value is malformed or empty; delete it so we can regenerate.
+    await prisma.digest.delete({ where: { cacheKey: key } }).catch(() => null);
   }
+
 
   // Single-flight: if multiple users click at the same time for the same cache key,
   // only one request generates and writes to DB; others await the same result.
@@ -145,19 +157,20 @@ export async function POST(req: Request) {
 
   const p = (async () => {
     // Re-check cache inside the lock to avoid a race.
+    // Re-check cache inside the lock to avoid a race.
     const again = await prisma.digest.findUnique({ where: { cacheKey: key } }).catch(() => null);
     if (again && again.createdAt >= cutoff) {
       try {
         const parsed = JSON.parse(again.summary);
-        return { ok: true, digest: parsed, cached: true };
+        if (isValidDigest(parsed)) {
+          return { ok: true, digest: parsed, cached: true };
+        }
       } catch {
-        return {
-          ok: true,
-          digest: { overview: again.summary, themes: [], highlights: [], whyItMatters: [], watchlist: [] },
-          cached: true,
-        };
+        // fall through
       }
+      await prisma.digest.delete({ where: { cacheKey: key } }).catch(() => null);
     }
+
 
     const quota = await enforceAndIncrementAiUsage({ userId, kind: "digest" });
     if (!quota.ok) {
@@ -186,18 +199,22 @@ export async function POST(req: Request) {
     try {
       parsed = JSON.parse(digestJson);
     } catch {
-      parsed = { overview: digestJson, themes: [], highlights: [], whyItMatters: [], watchlist: [] };
+      parsed = null;
+    }
+
+    if (!isValidDigest(parsed)) {
+      // Do not cache malformed responses.
+      return { ok: false, error: "Digest generation produced an invalid response", remaining: quota.remaining, _status: 500 };
     }
 
     // Cache only successful generations.
     await prisma.digest
       .upsert({
         where: { cacheKey: key },
-        create: { cacheKey: key, section, days, country, topic, summary: digestJson },
-        update: { summary: digestJson, section, days, country, topic, createdAt: new Date() },
+        create: { cacheKey: key, section, days, country, topic, summary: JSON.stringify(parsed) },
+        update: { summary: JSON.stringify(parsed), section, days, country, topic, createdAt: new Date() },
       })
       .catch(() => null);
-
     return { ok: true, digest: parsed, cached: false, remaining: quota.remaining };
   })();
 
