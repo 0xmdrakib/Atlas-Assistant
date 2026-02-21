@@ -43,6 +43,39 @@ function extractKeyPointsFromSummary(summary: string): string[] {
     .map((l) => l.replace(/^\d+\s*[\).:-]\s*/, ""))
     .filter((l) => l.length >= 8)
     .slice(0, 8);
+
+function stripKeyPointsFromSummary(summary: string): string {
+  const s = String(summary || "");
+  if (!s) return "";
+
+  const label = "key points:";
+  const lower = s.toLowerCase();
+  const start = lower.indexOf(label);
+  if (start < 0) return s.trim();
+
+  // Find the start of the next section after Key points.
+  const afterStart = start + label.length;
+  const tail = s.slice(afterStart);
+  const tailLower = tail.toLowerCase();
+
+  // Prefer Context/Why it matters if present.
+  const stopMarkers = ["
+context:", "
+why it matters:", "
+tldr:"];
+  let stop = tail.length;
+  for (const m of stopMarkers) {
+    const j = tailLower.indexOf(m);
+    if (j >= 0) stop = Math.min(stop, j);
+  }
+
+  const before = s.slice(0, start).trimEnd();
+  const after = tail.slice(stop).trimStart();
+  const out = [before, after].filter(Boolean).join("
+");
+  return out.trim();
+}
+
 }
 
 export function Feed({ section }: { section: Section }) {
@@ -372,7 +405,19 @@ setLast(new Date().toISOString());
       <div className="space-y-3">
         {items.map((it) => {
           const open = Boolean(aiOpen[it.id]);
-          const itemSpeakText = it.aiSummary || "";
+          const keyPoints = it.aiSummary ? extractKeyPointsFromSummary(it.aiSummary) : [];
+          const mainSummary = it.aiSummary ? stripKeyPointsFromSummary(it.aiSummary) : "";
+          const itemSpeakText = it.aiSummary
+            ? [
+                mainSummary,
+                keyPoints.length
+                  ? `Key points:
+${keyPoints.map((p, i) => `${i + 1}) ${p}`).join("\n")}`
+                  : "",
+              ]
+                .filter(Boolean)
+                .join("\n")
+            : "";
           return (
             <Card key={it.id} className="p-4">
               <div className="min-w-0">
@@ -421,26 +466,18 @@ setLast(new Date().toISOString());
                       ) : null}
                     </div>
                     <div className="mt-1 text-sm">
-                      {aiLoading[it.id] ? t(lang, "generating") : it.aiSummary || ""}
+                      {aiLoading[it.id] ? t(lang, "generating") : mainSummary}
                     </div>
 
-                    {it.aiSummary ? (
-                      (() => {
-                        const pts = extractKeyPointsFromSummary(it.aiSummary);
-                        if (pts.length === 0) return null;
-                        return (
-                          <details className="mt-3 rounded-xl border border-soft bg-black/5 px-3 py-2">
-                            <summary className="cursor-pointer select-none text-xs font-medium text-muted">
-                              {t(lang, "keyPoints")}
-                            </summary>
-                            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-                              {pts.map((p, idx) => (
-                                <li key={idx}>{p}</li>
-                              ))}
-                            </ul>
-                          </details>
-                        );
-                      })()
+                    {it.aiSummary && keyPoints.length ? (
+                      <div className="mt-3 rounded-xl border border-soft bg-black/5 px-3 py-2">
+                        <div className="text-xs font-medium text-muted">{t(lang, "keyPoints")}</div>
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                          {keyPoints.map((p, idx) => (
+                            <li key={idx}>{p}</li>
+                          ))}
+                        </ul>
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
