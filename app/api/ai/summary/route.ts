@@ -7,6 +7,12 @@ import { isTranslateEnabled, translateItemBatch } from "@/lib/translateProvider"
 
 const SUMMARY_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+function singleFlightMap(): Map<string, Promise<any>> {
+  const g = globalThis as any;
+  if (!g.__atlasSingleFlight) g.__atlasSingleFlight = new Map();
+  return g.__atlasSingleFlight as Map<string, Promise<any>>;
+}
+
 function enabled() {
   return String(process.env.AI_SUMMARY_ENABLED || "false").toLowerCase() === "true" && Boolean(process.env.AI_SUMMARY_API_KEY);
 }
@@ -85,44 +91,73 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, aiSummary: tr.aiSummary, cached: true });
   }
 
-  const quota = await enforceAndIncrementAiUsage({ userId, kind: "summary" });
-  if (!quota.ok) {
-    return Response.json({ ok: false, error: "Daily AI limit reached", remaining: quota.remaining }, { status: 429 });
+  // Single-flight: if multiple users click summary at the same time for the same
+  // item+lang, only one generation runs; others await the same result.
+  const lockKey = `summary:${id}:${lang}`;
+  const locks = singleFlightMap();
+  const existing = locks.get(lockKey);
+  if (existing) {
+    const payload = await existing;
+    const status = typeof payload?._status === "number" ? payload._status : 200;
+    if (payload && typeof payload === "object" && "_status" in payload) delete (payload as any)._status;
+    return Response.json(payload, { status });
   }
 
-  let ai = "";
-  try {
-    ai = await aiSummarizeItem({
-      title: tr?.title || item.title,
-      snippet: tr?.summary || item.summary,
-      url: item.url,
-      lang,
-    });
-  } catch (e: any) {
-    return Response.json(
-      { ok: false, error: e?.message || "Summary generation failed", remaining: quota.remaining },
-      { status: 500 }
-    );
-  }
-
-  // Only write to ItemTranslation when we already have a row for this language.
-  // If translation failed earlier (so `tr` is null), we still return the summary,
-  // but we avoid caching an English fallback under the target language.
-  if (tr) {
-    await prisma.itemTranslation
-      .upsert({
-        where: { itemId_lang: { itemId: id, lang } },
-        create: {
-          itemId: id,
-          lang,
-          title: tr?.title || item.title,
-          summary: tr?.summary || item.summary,
-          aiSummary: ai,
-        },
-        update: { aiSummary: ai },
-      })
+  const p = (async () => {
+    // Re-check cache inside the lock to avoid a race.
+    const tr2 = await prisma.itemTranslation
+      .findUnique({ where: { itemId_lang: { itemId: id, lang } } })
       .catch(() => null);
-  }
+    if (tr2?.aiSummary && tr2.updatedAt >= cutoff) {
+      return { ok: true, aiSummary: tr2.aiSummary, cached: true };
+    }
 
-  return Response.json({ ok: true, aiSummary: ai, cached: false, remaining: quota.remaining });
+    const quota = await enforceAndIncrementAiUsage({ userId, kind: "summary" });
+    if (!quota.ok) {
+      return { ok: false, error: "Daily AI limit reached", remaining: quota.remaining, _status: 429 };
+    }
+
+    let ai = "";
+    try {
+      ai = await aiSummarizeItem({
+        title: tr?.title || item.title,
+        snippet: tr?.summary || item.summary,
+        url: item.url,
+        lang,
+      });
+    } catch (e: any) {
+      return { ok: false, error: e?.message || "Summary generation failed", remaining: quota.remaining, _status: 500 };
+    }
+
+    // Only write to ItemTranslation when we already have a row for this language.
+    // If translation failed earlier (so `tr` is null), we still return the summary,
+    // but we avoid caching an English fallback under the target language.
+    if (tr) {
+      await prisma.itemTranslation
+        .upsert({
+          where: { itemId_lang: { itemId: id, lang } },
+          create: {
+            itemId: id,
+            lang,
+            title: tr?.title || item.title,
+            summary: tr?.summary || item.summary,
+            aiSummary: ai,
+          },
+          update: { aiSummary: ai },
+        })
+        .catch(() => null);
+    }
+
+    return { ok: true, aiSummary: ai, cached: false, remaining: quota.remaining };
+  })();
+
+  locks.set(lockKey, p);
+  try {
+    const payload = await p;
+    const status = typeof payload?._status === "number" ? payload._status : 200;
+    if (payload && typeof payload === "object" && "_status" in payload) delete (payload as any)._status;
+    return Response.json(payload, { status });
+  } finally {
+    locks.delete(lockKey);
+  }
 }
