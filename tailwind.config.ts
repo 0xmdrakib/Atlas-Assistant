@@ -10,8 +10,8 @@ const config: Config = {
         "2xl": "1.25rem",
       },
       boxShadow: {
-        // Subtle shadow that stays calm on both dark + light displays
-        soft: "0 14px 36px rgba(0,0,0,.42)",
+        // Shadow driven by theme tokens (works in light + dark)
+        soft: "0 14px 36px hsl(var(--shadow) / 0.28)",
       },
     },
   },
