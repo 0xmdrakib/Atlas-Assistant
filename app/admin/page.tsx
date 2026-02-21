@@ -10,7 +10,7 @@ export default async function AdminPage({ searchParams }: { searchParams: { toke
         <div className="rounded-2xl border border-soft bg-surface p-6 shadow-soft">
           <div className="text-lg font-semibold">Admin locked</div>
           <div className="mt-2 text-sm text-muted">
-            Open <code className="rounded bg-black/10 px-1">/admin?token=YOUR_ADMIN_TOKEN</code>
+            Open <code className="rounded bg-wash-35 px-1">/admin?token=YOUR_ADMIN_TOKEN</code>
           </div>
         </div>
       </div>
@@ -25,12 +25,12 @@ export default async function AdminPage({ searchParams }: { searchParams: { toke
       <div className="rounded-2xl border border-soft bg-surface p-6 shadow-soft">
         <div className="text-xl font-semibold">Admin</div>
         <div className="mt-1 text-sm text-muted">
-          Sources + DB counts. Edit sources in <code className="rounded bg-black/10 px-1">sources/seed-sources.json</code> then run seed + ingest.
+          Sources + DB counts. Edit sources in <code className="rounded bg-wash-35 px-1">sources/seed-sources.json</code> then run seed + ingest.
         </div>
 
         <div className="mt-4 grid gap-2 sm:grid-cols-3">
           {counts.map((c) => (
-            <div key={c.section} className="rounded-2xl border border-soft bg-black/10 p-3">
+            <div key={c.section} className="rounded-2xl border border-soft bg-wash-35 p-3">
               <div className="text-xs text-muted">{c.section}</div>
               <div className="text-lg font-semibold">{c._count._all}</div>
             </div>
@@ -39,7 +39,7 @@ export default async function AdminPage({ searchParams }: { searchParams: { toke
 
         <div className="mt-6 overflow-auto rounded-2xl border border-soft">
           <table className="min-w-full text-sm">
-            <thead className="bg-black/10 text-muted">
+            <thead className="bg-wash-35 text-muted">
               <tr>
                 <th className="px-3 py-2 text-left">Section</th>
                 <th className="px-3 py-2 text-left">Name</th>
