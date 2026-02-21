@@ -109,7 +109,7 @@ async function geminiGenerateText(args: {
   // Keep the request strict: avoid sending duplicate/legacy fields, because
   // they can cause the server to ignore structured output settings.
   if (responseMimeType) body.generationConfig.responseMimeType = responseMimeType;
-  if (responseJsonSchema) body.generationConfig._responseJsonSchema = responseJsonSchema;
+  if (responseJsonSchema) body.generationConfig.responseSchema = responseJsonSchema;
 
   const res = await fetch(url, {
     method: "POST",
@@ -171,15 +171,16 @@ async function openaiChatCompletion(args: {
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   temperature?: number;
   max_tokens?: number;
+  response_format?: any;
 }): Promise<string> {
-  const { apiKey, model, messages, temperature = 0.2, max_tokens = 500 } = args;
+  const { apiKey, model, messages, temperature = 0.2, max_tokens = 500, response_format } = args;
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model, messages, temperature, max_tokens }),
+    body: JSON.stringify({ model, messages, temperature, max_tokens, ...(response_format ? { response_format } : {}) }),
   });
   if (!res.ok) {
     const t = await res.text().catch(() => "");
@@ -337,45 +338,71 @@ ${args.items
     watchlist: (parsed?.watchlist || []).map(sanitizeSingleLine).filter(Boolean),
   });
 
+  const schema = {
+    type: "object",
+    properties: {
+      overview: { type: "string" },
+      themes: { type: "array", items: { type: "string" } },
+      highlights: { type: "array", items: { type: "string" } },
+      whyItMatters: { type: "array", items: { type: "string" } },
+      watchlist: { type: "array", items: { type: "string" } },
+    },
+    required: ["overview", "themes", "highlights", "whyItMatters", "watchlist"],
+    additionalProperties: false,
+  };
+
   if (provider === "openai") {
     const out = await openaiChatCompletion({
       apiKey: key,
       model,
       messages: [
-        { role: "system", content: "Return only JSON." },
+        { role: "system", content: "You are a helpful assistant designed to output JSON." },
         { role: "user", content: prompt },
       ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "AtlasDigest",
+          strict: true,
+          schema,
+        },
+      },
       temperature: 0.2,
-      max_tokens: 1100,
+      max_tokens: 1600,
     });
 
     const parsed = safeParseJson<any>(out);
     return JSON.stringify(normalizeDigest(parsed || { overview: out }));
   }
 
-  const out = await geminiGenerateText({
+  const out1 = await geminiGenerateText({
     apiKey: key,
     model,
     prompt,
     systemInstruction: "Return only JSON.",
-    temperature: 0.2,
-    maxOutputTokens: 1200,
+    temperature: 0,
+    maxOutputTokens: 1600,
     responseMimeType: "application/json",
-    responseJsonSchema: {
-      type: "object",
-      properties: {
-        overview: { type: "string" },
-        themes: { type: "array", items: { type: "string" } },
-        highlights: { type: "array", items: { type: "string" } },
-        whyItMatters: { type: "array", items: { type: "string" } },
-        watchlist: { type: "array", items: { type: "string" } },
-      },
-      required: ["overview", "themes", "highlights", "whyItMatters", "watchlist"],
-    },
+    responseJsonSchema: schema,
   });
 
-  const parsed = safeParseJson<any>(out);
-  return JSON.stringify(normalizeDigest(parsed || { overview: out }));
+  const parsed1 = safeParseJson<any>(out1);
+  if (parsed1) return JSON.stringify(normalizeDigest(parsed1));
+
+  // Retry once: Gemini occasionally ignores schema and returns truncated JSON.
+  const out2 = await geminiGenerateText({
+    apiKey: key,
+    model,
+    prompt: `${prompt}\n\nReturn ONLY valid JSON that matches the schema. Do not include markdown fences.`,
+    systemInstruction: "Return only JSON.",
+    temperature: 0,
+    maxOutputTokens: 2200,
+    responseMimeType: "application/json",
+    responseJsonSchema: schema,
+  });
+
+  const parsed2 = safeParseJson<any>(out2);
+  return JSON.stringify(normalizeDigest(parsed2 || { overview: out2 }));
 }
 
 export async function aiTranslateBatch(args: {
