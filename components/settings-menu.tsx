@@ -1,12 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Menu, Globe, Search, Check, ChevronDown, LogOut } from "lucide-react";
+import { Menu, Globe, Search, Check, ChevronDown } from "lucide-react";
 import { Card, Button, Pill } from "@/components/ui";
 import { LANGUAGES, languageByCode } from "@/lib/i18n";
 import { useLanguage } from "@/components/language-provider";
 import { useTheme } from "next-themes";
-import { signIn, signOut, useSession } from "next-auth/react";
 
 const UI_CACHE_VER = "1";
 function uiCacheKey(lang: string) {
@@ -20,9 +19,6 @@ function normalize(s: string) {
 export function SettingsMenu() {
   const { lang, setLang, t } = useLanguage();
   const { theme, setTheme } = useTheme();
-  const { data: session, status } = useSession();
-  const authed = status === "authenticated";
-  const loading = status === "loading";
 
   const [open, setOpen] = React.useState(false);
   const [langOpen, setLangOpen] = React.useState(false);
@@ -126,59 +122,36 @@ export function SettingsMenu() {
       {open ? (
         <Card className="absolute right-0 mt-2 w-[320px] p-4 shadow-xl">
           <div className="space-y-4">
-            {/* 1) Profile / Auth */}
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-soft bg-black/20 p-3">
-              <div className="flex items-center gap-3 min-w-0">
-                {authed && session?.user?.image ? (
-                  // Use <img> to avoid Next Image remotePatterns config.
-                  <img
-                    src={session.user.image}
-                    alt={session.user.name ?? session.user.email ?? "User"}
-                    className="h-10 w-10 rounded-full border border-soft object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="h-10 w-10 rounded-full border border-soft bg-white/5 grid place-items-center text-xs text-muted">
-                    {authed
-                      ? (session?.user?.name?.trim()?.[0] ?? session?.user?.email?.trim()?.[0] ?? "U").toUpperCase()
-                      : "?"}
-                  </div>
-                )}
-
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">
-                    {loading
-                      ? "Checking session…"
-                      : authed
-                        ? (session?.user?.name || session?.user?.email || "Signed in")
-                        : "Not signed in"}
-                  </div>
-                  <div className="truncate text-xs text-muted">{authed ? (session?.user?.email ?? "") : ""}</div>
-                </div>
-              </div>
-
-              {!loading && !authed ? (
-                <Button
-                  variant="ghost"
-                  className="h-9"
-                  onClick={() => {
-                    setOpen(false);
-                    setLangOpen(false);
-                    signIn("google");
-                  }}
+            <div>
+              <div className="text-xs font-medium text-muted">{t(lang, "theme")}</div>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  onClick={() => setTheme("dark")}
+                  className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-ring ${
+                    theme === "dark" ? "border-[hsl(var(--accent)/.35)] bg-wash-55" : "border-soft hover-wash"
+                  }`}
                 >
-                  Sign in
-                </Button>
-              ) : null}
+                  {t(lang, "dark")}
+                  {theme === "dark" ? <Pill>✓</Pill> : null}
+                </button>
+                <button
+                  onClick={() => setTheme("light")}
+                  className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-ring ${
+                    theme === "light" ? "border-[hsl(var(--accent)/.35)] bg-wash-55" : "border-soft hover-wash"
+                  }`}
+                >
+                  {t(lang, "light")}
+                  {theme === "light" ? <Pill>✓</Pill> : null}
+                </button>
+              </div>
             </div>
 
-            {/* 2) Language selector */}
             <div className="pt-2 border-t border-soft">
               <div className="relative">
                 <button
                   ref={langBtnRef}
                   onClick={() => setLangOpen((v) => !v)}
-                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-white/5 px-3 py-2 text-sm transition focus-ring hover:bg-white/10"
+                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-wash-20 px-3 py-2 text-sm transition focus-ring hover:bg-[hsl(var(--hover)/.65)]"
                 >
                   <span className="inline-flex items-center gap-2">
                     <Globe size={16} />
@@ -189,12 +162,12 @@ export function SettingsMenu() {
 
                 {langOpen ? (
                   <div
-                    className={`absolute right-0 z-50 w-[340px] overflow-hidden rounded-2xl border border-soft bg-black/70 shadow-2xl backdrop-blur ${
+                    className={`absolute right-0 z-50 w-[340px] overflow-hidden rounded-2xl border border-soft bg-[hsl(var(--surface)/.88)] shadow-2xl backdrop-blur ${
                       langSide === "bottom" ? "top-[calc(100%+10px)]" : "bottom-[calc(100%+10px)]"
                     }`}
                   >
                     <div className="p-3 border-b border-soft">
-                      <div className="flex items-center gap-2 rounded-xl border border-soft bg-white/5 px-3 py-2">
+                      <div className="flex items-center gap-2 rounded-xl border border-soft bg-wash-20 px-3 py-2">
                         <Search size={16} className="text-muted" />
                         <input
                           value={query}
@@ -230,7 +203,7 @@ export function SettingsMenu() {
                               if (changed) setTimeout(() => window.location.reload(), 0);
                             }}
                             className={`w-full px-4 py-3 text-left transition focus-ring ${
-                              active ? "bg-white/10" : "hover:bg-white/5"
+                              active ? "bg-wash-35" : "hover-wash"
                             }`}
                           >
                             <div className="flex items-start justify-between gap-4">
@@ -251,50 +224,6 @@ export function SettingsMenu() {
                 ) : null}
               </div>
             </div>
-
-            {/* 3) Theme */}
-            <div className="pt-2 border-t border-soft">
-              <div className="text-xs font-medium text-muted">{t(lang, "theme")}</div>
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  onClick={() => setTheme("dark")}
-                  className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-ring ${
-                    theme === "dark" ? "border-[hsl(var(--accent)/.35)] bg-black/20" : "border-soft hover:bg-white/5"
-                  }`}
-                >
-                  {t(lang, "dark")}
-                  {theme === "dark" ? <Pill>✓</Pill> : null}
-                </button>
-                <button
-                  onClick={() => setTheme("light")}
-                  className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-ring ${
-                    theme === "light" ? "border-[hsl(var(--accent)/.35)] bg-black/20" : "border-soft hover:bg-white/5"
-                  }`}
-                >
-                  {t(lang, "light")}
-                  {theme === "light" ? <Pill>✓</Pill> : null}
-                </button>
-              </div>
-            </div>
-
-            {/* 4) Sign out */}
-            {authed ? (
-              <div className="pt-2 border-t border-soft">
-                <button
-                  onClick={() => {
-                    setOpen(false);
-                    setLangOpen(false);
-                    signOut();
-                  }}
-                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-white/5 px-3 py-2 text-sm transition focus-ring hover:bg-white/10"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <LogOut size={16} />
-                    <span>Sign out</span>
-                  </span>
-                </button>
-              </div>
-            ) : null}
           </div>
         </Card>
       ) : null}
