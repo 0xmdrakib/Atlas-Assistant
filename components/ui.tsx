@@ -6,7 +6,7 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   return (
     <div
       className={cn(
-        "rounded-2xl border border-soft bg-surface shadow-soft ring-1 ring-white/5",
+        "rounded-2xl border border-soft bg-surface shadow-soft ring-1 ring-subtle",
         className
       )}
       {...props}
@@ -18,7 +18,7 @@ export function Pill({ className, ...props }: React.HTMLAttributes<HTMLSpanEleme
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border border-soft bg-black/20 px-2.5 py-0.5 text-xs text-muted",
+        "inline-flex items-center rounded-full border border-soft bg-glass px-2.5 py-0.5 text-xs text-muted",
         className
       )}
       {...props}
@@ -35,7 +35,7 @@ export function Button({
     "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium transition focus-ring disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:bg-transparent";
   const styles =
     variant === "ghost"
-      ? "border border-soft bg-transparent hover:bg-white/5"
+      ? "border border-soft bg-transparent hover-subtle"
       : variant === "danger"
       ? "bg-[hsl(var(--danger))] text-black hover:opacity-90"
       : "bg-[hsl(var(--accent))] text-black hover:opacity-90";
@@ -62,7 +62,7 @@ export function Segmented<T extends string | number>({
   options: Array<SegOption<T>>;
 }) {
   return (
-    <div className="inline-flex overflow-hidden rounded-xl border border-soft bg-black/20">
+    <div className="inline-flex overflow-hidden rounded-xl border border-soft bg-glass">
       {options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -73,7 +73,7 @@ export function Segmented<T extends string | number>({
               "px-3 py-2 text-sm transition focus-ring",
               active
                 ? "bg-[hsl(var(--accent))] text-black"
-                : "text-muted hover:bg-white/5"
+                : "text-muted hover-subtle"
             )}
             type="button"
           >
