@@ -127,7 +127,7 @@ export function SettingsMenu() {
         <Card className="absolute right-0 mt-2 w-[320px] p-4 shadow-xl">
           <div className="space-y-4">
             {/* 1) Profile / Auth */}
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-soft bg-black/20 p-3">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-soft bg-glass p-3">
               <div className="flex items-center gap-3 min-w-0">
                 {authed && session?.user?.image ? (
                   // Use <img> to avoid Next Image remotePatterns config.
@@ -138,7 +138,7 @@ export function SettingsMenu() {
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className="h-10 w-10 rounded-full border border-soft bg-white/5 grid place-items-center text-xs text-muted">
+                  <div className="h-10 w-10 rounded-full border border-soft bg-subtle grid place-items-center text-xs text-muted">
                     {authed
                       ? (session?.user?.name?.trim()?.[0] ?? session?.user?.email?.trim()?.[0] ?? "U").toUpperCase()
                       : "?"}
@@ -178,7 +178,7 @@ export function SettingsMenu() {
                 <button
                   ref={langBtnRef}
                   onClick={() => setLangOpen((v) => !v)}
-                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-white/5 px-3 py-2 text-sm transition focus-ring hover:bg-white/10"
+                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-subtle px-3 py-2 text-sm transition focus-ring hover-subtle-2"
                 >
                   <span className="inline-flex items-center gap-2">
                     <Globe size={16} />
@@ -189,12 +189,12 @@ export function SettingsMenu() {
 
                 {langOpen ? (
                   <div
-                    className={`absolute right-0 z-50 w-[340px] overflow-hidden rounded-2xl border border-soft bg-black/70 shadow-2xl backdrop-blur ${
+                    className={`absolute right-0 z-50 w-[340px] overflow-hidden rounded-2xl border border-soft bg-glass-strong shadow-2xl backdrop-blur ${
                       langSide === "bottom" ? "top-[calc(100%+10px)]" : "bottom-[calc(100%+10px)]"
                     }`}
                   >
                     <div className="p-3 border-b border-soft">
-                      <div className="flex items-center gap-2 rounded-xl border border-soft bg-white/5 px-3 py-2">
+                      <div className="flex items-center gap-2 rounded-xl border border-soft bg-subtle px-3 py-2">
                         <Search size={16} className="text-muted" />
                         <input
                           value={query}
@@ -230,7 +230,7 @@ export function SettingsMenu() {
                               if (changed) setTimeout(() => window.location.reload(), 0);
                             }}
                             className={`w-full px-4 py-3 text-left transition focus-ring ${
-                              active ? "bg-white/10" : "hover:bg-white/5"
+                              active ? "bg-subtle-2" : "hover-subtle"
                             }`}
                           >
                             <div className="flex items-start justify-between gap-4">
@@ -259,7 +259,7 @@ export function SettingsMenu() {
                 <button
                   onClick={() => setTheme("dark")}
                   className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-ring ${
-                    theme === "dark" ? "border-[hsl(var(--accent)/.35)] bg-black/20" : "border-soft hover:bg-white/5"
+                    theme === "dark" ? "border-[hsl(var(--accent)/.35)] bg-glass" : "border-soft hover-subtle"
                   }`}
                 >
                   {t(lang, "dark")}
@@ -268,7 +268,7 @@ export function SettingsMenu() {
                 <button
                   onClick={() => setTheme("light")}
                   className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-ring ${
-                    theme === "light" ? "border-[hsl(var(--accent)/.35)] bg-black/20" : "border-soft hover:bg-white/5"
+                    theme === "light" ? "border-[hsl(var(--accent)/.35)] bg-glass" : "border-soft hover-subtle"
                   }`}
                 >
                   {t(lang, "light")}
@@ -286,7 +286,7 @@ export function SettingsMenu() {
                     setLangOpen(false);
                     signOut();
                   }}
-                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-white/5 px-3 py-2 text-sm transition focus-ring hover:bg-white/10"
+                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-subtle px-3 py-2 text-sm transition focus-ring hover-subtle-2"
                 >
                   <span className="inline-flex items-center gap-2">
                     <LogOut size={16} />
