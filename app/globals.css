@@ -3,42 +3,92 @@
 @tailwind utilities;
 
 /*
-  Atlas theme: dark basalt + creamy whites + warm gold accent.
-  Goal: "pro" contrast + calm texture (subtle dots + noise).
+  Atlas theme: modern "paper + basalt".
+  Light theme is default; Dark theme overrides below.
+
+  Variables are HSL triples ("h s l") and used with `hsl(var(--x) / alpha)`.
 */
 :root {
-  --bg: 220 35% 5%;
-  --bg2: 223 28% 8%;
-  --surface: 222 22% 12%;
+  /* Light: warm paper */
+  --bg: 40 45% 97%;
+  --bg2: 220 30% 96%;
+  --surface: 0 0% 100%;
 
-  --fg: 38 35% 96%;
-  --muted-fg: 38 14% 76%;
+  --fg: 222 22% 14%;
+  --muted-fg: 222 10% 40%;
 
-  --border: 220 18% 22%;
-  --ring: 42 45% 80%;
-  --accent: 42 70% 62%;
-  --danger: 0 72% 62%;
+  --border: 222 14% 86%;
+  --ring: 42 70% 55%;
+  --accent: 42 85% 45%;
+  --danger: 0 72% 50%;
+
+  /* Translucent layers + texture */
+  --wash: 222 30% 94%;
+  --hover: 222 18% 90%;
+  --ring-soft: 222 20% 18%;
+  --grid: 222 18% 10%;
+  --grid-opacity: 0.09;
+  --noise-opacity: 0.03;
+  --spot1: 0.08;
+  --spot2: 0.05;
+  --backdrop: 0 0% 0%;
+}
+
+.light {
+  /* Explicit class for next-themes */
+  --bg: 40 45% 97%;
+  --bg2: 220 30% 96%;
+  --surface: 0 0% 100%;
+
+  --fg: 222 22% 14%;
+  --muted-fg: 222 10% 40%;
+
+  --border: 222 14% 86%;
+  --ring: 42 70% 55%;
+  --accent: 42 85% 45%;
+  --danger: 0 72% 50%;
+
+  --wash: 222 30% 94%;
+  --hover: 222 18% 90%;
+  --ring-soft: 222 20% 18%;
+  --grid: 222 18% 10%;
+  --grid-opacity: 0.09;
+  --noise-opacity: 0.03;
+  --spot1: 0.08;
+  --spot2: 0.05;
+  --backdrop: 0 0% 0%;
 }
 
 .dark {
-  --bg: 220 35% 5%;
-  --bg2: 223 28% 8%;
-  --surface: 222 22% 12%;
+  /* Dark: basalt */
+  --bg: 222 32% 6%;
+  --bg2: 224 26% 9%;
+  --surface: 223 20% 13%;
 
-  --fg: 38 35% 96%;
-  --muted-fg: 38 14% 76%;
+  --fg: 40 25% 96%;
+  --muted-fg: 40 14% 74%;
 
-  --border: 220 18% 22%;
-  --ring: 42 45% 80%;
-  --accent: 42 70% 62%;
+  --border: 223 14% 24%;
+  --ring: 42 55% 80%;
+  --accent: 42 80% 60%;
   --danger: 0 72% 62%;
+
+  --wash: 223 18% 15%;
+  --hover: 223 18% 20%;
+  --ring-soft: 0 0% 100%;
+  --grid: 0 0% 100%;
+  --grid-opacity: 0.14;
+  --noise-opacity: 0.05;
+  --spot1: 0.12;
+  --spot2: 0.06;
+  --backdrop: 0 0% 0%;
 }
 
 body {
   background:
     /* Use Color 4 slash-alpha syntax so custom properties work everywhere */
-    radial-gradient(1100px 900px at 18% 10%, hsl(var(--accent) / 0.12), transparent 56%),
-    radial-gradient(900px 700px at 82% 14%, hsla(199, 70%, 55%, 0.06), transparent 60%),
+    radial-gradient(1100px 900px at 18% 10%, hsl(var(--accent) / var(--spot1)), transparent 56%),
+    radial-gradient(900px 700px at 82% 14%, hsla(199, 70%, 55%, var(--spot2)), transparent 60%),
     linear-gradient(to bottom, hsl(var(--bg)), hsl(var(--bg2)));
   color: hsl(var(--fg));
   letter-spacing: -0.01em;
@@ -51,9 +101,9 @@ body::before {
   inset: 0;
   pointer-events: none;
   /* grid texture */
-  background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.045) 1px, transparent 0);
+  background-image: radial-gradient(circle at 1px 1px, hsl(var(--grid) / 0.10) 1px, transparent 0);
   background-size: 24px 24px;
-  opacity: 0.16;
+  opacity: var(--grid-opacity);
   mix-blend-mode: soft-light;
 }
 
@@ -63,13 +113,21 @@ body::after {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.05;
+  opacity: var(--noise-opacity);
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
   mix-blend-mode: soft-light;
 }
 
-.bg-surface { background: linear-gradient(180deg, hsl(var(--surface) / 0.82), hsl(var(--bg2) / 0.70)); }
+.bg-surface { background: linear-gradient(180deg, hsl(var(--surface) / 0.92), hsl(var(--bg2) / 0.72)); }
 .text-muted { color: hsl(var(--muted-fg)); }
-.border-soft { border-color: rgba(255,255,255,0.08); }
+.border-soft { border-color: hsl(var(--border) / 0.70); }
 .focus-ring:focus { outline: none; box-shadow: 0 0 0 3px hsl(var(--ring) / .25); }
+
+/* Theme-aware translucent layers used across the UI */
+.bg-wash-20 { background-color: hsl(var(--wash) / 0.20); }
+.bg-wash-35 { background-color: hsl(var(--wash) / 0.35); }
+.bg-wash-55 { background-color: hsl(var(--wash) / 0.55); }
+.bg-wash-70 { background-color: hsl(var(--wash) / 0.70); }
+.hover-wash:hover { background-color: hsl(var(--hover) / 0.55); }
+.ring-soft { --tw-ring-color: hsl(var(--ring-soft) / 0.08); }
