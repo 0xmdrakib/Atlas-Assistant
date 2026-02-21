@@ -11,7 +11,7 @@ export function AuthButton() {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-soft bg-black/20 px-3 py-2 text-xs text-muted">
+      <div className="rounded-2xl border border-soft bg-glass px-3 py-2 text-xs text-muted">
         Checking session…
       </div>
     );
