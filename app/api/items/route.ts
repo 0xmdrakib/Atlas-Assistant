@@ -6,23 +6,14 @@ import { prisma } from "@/lib/prisma";
 import type { Section } from "@/lib/types";
 import { isTranslateEnabled, translateItemBatch } from "@/lib/translateProvider";
 
-const AI_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-async function maybeCleanupAiCaches() {
-  // Run at most once per hour per server instance.
+
+function translateSingleFlightMap(): Map<string, Promise<void>> {
   const g = globalThis as any;
-  const now = Date.now();
-  if (typeof g.__atlasLastCleanupAt === "number" && now - g.__atlasLastCleanupAt < AI_CACHE_TTL_MS) return;
-  g.__atlasLastCleanupAt = now;
-
-  const cutoff = new Date(now - AI_CACHE_TTL_MS);
-
-  // Clear stale shared caches so the next click regenerates fresh content.
-  await prisma.digest.deleteMany({ where: { createdAt: { lt: cutoff } } }).catch(() => null);
-  await prisma.itemTranslation
-    .updateMany({ where: { aiSummary: { not: null }, updatedAt: { lt: cutoff } }, data: { aiSummary: null } })
-    .catch(() => null);
+  if (!g.__atlasTranslateSingleFlight) g.__atlasTranslateSingleFlight = new Map();
+  return g.__atlasTranslateSingleFlight as Map<string, Promise<void>>;
 }
+
 
 const ALLOWED_SECTIONS = new Set<Section>([
   "global",
@@ -47,10 +38,6 @@ export async function GET(req: NextRequest) {
   const lang = (url.searchParams.get("lang") || "en").trim().toLowerCase();
   const section = normalizeSection(url.searchParams.get("section"));
   const days = Math.max(1, Math.min(30, Number(url.searchParams.get("days") || "7")));
-
-  // Keep AI caches aligned with the feed refresh cadence.
-  // If your ingest runs hourly, this will also clear AI summaries/digests hourly.
-  await maybeCleanupAiCaches();
 
   const afterDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -134,38 +121,57 @@ export async function GET(req: NextRequest) {
       const input = missing.map((m) => ({ id: m.id, title: m.title, summary: m.summary }));
       const inputById = new Map(input.map((x) => [x.id, x]));
 
-      const translated = await translateItemBatch(input, lang);
+      const missingIds = missing.map((m) => m.id).sort();
+      const lockKey = `translate:${lang}:${missingIds.join(",")}`;
+      const locks = translateSingleFlightMap();
 
-      // Only cache successful translations. If the model fails and we fall back to English,
-      // we DO NOT write anything to the DB so a later request can retry.
-      const toUpsert = translated.filter((t) => {
-        if (!t.ok) return false;
-        const src = inputById.get(t.id);
-        if (!src) return false;
-        const sameTitle = String(t.title ?? "").trim() === String(src.title ?? "").trim();
-        const sameSummary = String(t.summary ?? "").trim() === String(src.summary ?? "").trim();
-        return !(sameTitle && sameSummary);
-      });
+      const run = async () => {
+        const translated = await translateItemBatch(input, lang);
 
-      if (toUpsert.length > 0) {
-        // Upsert translations (shared cache across users).
-        await prisma.$transaction(
-          toUpsert.map((t) =>
-            prisma.itemTranslation.upsert({
-              where: { itemId_lang: { itemId: t.id, lang } },
-              update: { title: t.title, summary: t.summary ?? "" },
-              create: { itemId: t.id, lang, title: t.title, summary: t.summary ?? "" },
-            })
-          )
-        );
+        // Only cache successful translations. If the model fails and we fall back to English,
+        // we DO NOT write anything to the DB so a later request can retry.
+        const toUpsert = translated.filter((t) => {
+          if (!t.ok) return false;
+          const src = inputById.get(t.id);
+          if (!src) return false;
+          const sameTitle = String(t.title ?? "").trim() === String(src.title ?? "").trim();
+          const sameSummary = String(t.summary ?? "").trim() === String(src.summary ?? "").trim();
+          return !(sameTitle && sameSummary);
+        });
 
-        // Refresh cache map.
+        if (toUpsert.length > 0) {
+          // Upsert translations (shared cache across users).
+          await prisma.$transaction(
+            toUpsert.map((t) =>
+              prisma.itemTranslation.upsert({
+                where: { itemId_lang: { itemId: t.id, lang } },
+                update: { title: t.title, summary: t.summary ?? "" },
+                create: { itemId: t.id, lang, title: t.title, summary: t.summary ?? "" },
+              })
+            )
+          );
+        }
+
+        // Refresh cache map (always). This avoids race-y partial maps.
         const again = await prisma.itemTranslation.findMany({
           where: { itemId: { in: ids }, lang },
           select: { itemId: true, title: true, summary: true },
         });
         byItemId.clear();
         for (const t of again) byItemId.set(t.itemId, t);
+      };
+
+      const existingLock = locks.get(lockKey);
+      if (existingLock) {
+        await existingLock;
+      } else {
+        const p = run().catch(() => undefined) as Promise<void>;
+        locks.set(lockKey, p);
+        try {
+          await p;
+        } finally {
+          locks.delete(lockKey);
+        }
       }
     }
 
