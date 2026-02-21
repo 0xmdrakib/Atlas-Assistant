@@ -64,8 +64,8 @@ export function TabShell({ children }: { children: React.ReactNode }) {
               className={cn(
                 "inline-flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm transition focus-ring sm:w-auto sm:justify-start",
                 active
-                  ? "border-[hsl(var(--accent)/.35)] bg-black/25 text-[hsl(var(--fg))]"
-                  : "border-soft text-muted hover:bg-white/5"
+                  ? "border-[hsl(var(--accent)/.35)] bg-glass text-[hsl(var(--fg))]"
+                  : "border-soft text-muted hover-subtle"
               )}
             >
               <Icon size={16} />
