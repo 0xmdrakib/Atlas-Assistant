@@ -3,42 +3,62 @@
 @tailwind utilities;
 
 /*
-  Atlas theme: dark basalt + creamy whites + warm gold accent.
-  Goal: "pro" contrast + calm texture (subtle dots + noise).
+  Atlas theme tokens (HSL values).
+  - Default :root = LIGHT theme
+  - .dark overrides for DARK theme
+
+  Why HSL?
+  - Tailwind arbitrary values can directly use: hsl(var(--token) / <alpha>)
+  - Makes it easy to keep contrast + harmony consistent.
 */
 :root {
-  --bg: 220 35% 5%;
-  --bg2: 223 28% 8%;
-  --surface: 222 22% 12%;
+  /* Light — porcelain + warm sand */
+  --bg: 38 55% 97%;
+  --bg2: 38 35% 93%;
+  --surface: 0 0% 100%;
+  --surface2: 38 30% 96%;
 
-  --fg: 38 35% 96%;
-  --muted-fg: 38 14% 76%;
+  --fg: 222 25% 12%;
+  --muted-fg: 222 12% 40%;
 
-  --border: 220 18% 22%;
-  --ring: 42 45% 80%;
-  --accent: 42 70% 62%;
-  --danger: 0 72% 62%;
+  --border: 222 14% 84%;
+  --ring: 35 88% 58%;
+  --accent: 35 92% 52%;
+  --accent2: 188 62% 44%;
+  --danger: 0 80% 54%;
+
+  /* shadow color (used by Tailwind shadow-soft) */
+  --shadow: 222 55% 10%;
 }
+
+html { color-scheme: light; }
 
 .dark {
-  --bg: 220 35% 5%;
-  --bg2: 223 28% 8%;
-  --surface: 222 22% 12%;
+  /* Dark — basalt + warm ivory */
+  --bg: 222 30% 6%;
+  --bg2: 222 24% 9%;
+  --surface: 222 20% 13%;
+  --surface2: 222 20% 16%;
 
-  --fg: 38 35% 96%;
-  --muted-fg: 38 14% 76%;
+  --fg: 40 35% 96%;
+  --muted-fg: 38 16% 74%;
 
-  --border: 220 18% 22%;
-  --ring: 42 45% 80%;
-  --accent: 42 70% 62%;
+  --border: 222 15% 22%;
+  --ring: 35 88% 68%;
+  --accent: 35 88% 62%;
+  --accent2: 189 70% 55%;
   --danger: 0 72% 62%;
+
+  --shadow: 0 0% 0%;
 }
+
+.dark { color-scheme: dark; }
 
 body {
   background:
     /* Use Color 4 slash-alpha syntax so custom properties work everywhere */
     radial-gradient(1100px 900px at 18% 10%, hsl(var(--accent) / 0.12), transparent 56%),
-    radial-gradient(900px 700px at 82% 14%, hsla(199, 70%, 55%, 0.06), transparent 60%),
+    radial-gradient(900px 700px at 82% 14%, hsl(var(--accent2) / 0.10), transparent 60%),
     linear-gradient(to bottom, hsl(var(--bg)), hsl(var(--bg2)));
   color: hsl(var(--fg));
   letter-spacing: -0.01em;
@@ -51,7 +71,7 @@ body::before {
   inset: 0;
   pointer-events: none;
   /* grid texture */
-  background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.045) 1px, transparent 0);
+  background-image: radial-gradient(circle at 1px 1px, hsl(var(--fg) / 0.06) 1px, transparent 0);
   background-size: 24px 24px;
   opacity: 0.16;
   mix-blend-mode: soft-light;
@@ -69,7 +89,20 @@ body::after {
   mix-blend-mode: soft-light;
 }
 
-.bg-surface { background: linear-gradient(180deg, hsl(var(--surface) / 0.82), hsl(var(--bg2) / 0.70)); }
+.bg-surface {
+  background: linear-gradient(180deg, hsl(var(--surface) / 0.88), hsl(var(--bg2) / 0.72));
+}
 .text-muted { color: hsl(var(--muted-fg)); }
-.border-soft { border-color: rgba(255,255,255,0.08); }
-.focus-ring:focus { outline: none; box-shadow: 0 0 0 3px hsl(var(--ring) / .25); }
+.border-soft { border-color: hsl(var(--border) / 0.72); }
+.focus-ring:focus { outline: none; box-shadow: 0 0 0 3px hsl(var(--ring) / 0.25); }
+
+/* Semantic "glass" utilities that look right in BOTH themes */
+.bg-glass { background: hsl(var(--surface) / 0.60); }
+.bg-glass-strong { background: hsl(var(--surface2) / 0.78); }
+.bg-subtle { background: hsl(var(--fg) / 0.04); }
+.bg-subtle-2 { background: hsl(var(--fg) / 0.06); }
+.bg-overlay { background: hsl(var(--bg) / 0.74); }
+
+.ring-subtle { --tw-ring-color: hsl(var(--fg) / 0.06); }
+.hover-subtle:hover { background: hsl(var(--fg) / 0.04); }
+.hover-subtle-2:hover { background: hsl(var(--fg) / 0.06); }
