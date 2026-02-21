@@ -1,5 +1,6 @@
 import { Receiver } from "@upstash/qstash";
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { ingestOnce } from "@/lib/ingest";
 
 // Ensure the handler isn't accidentally cached.
@@ -11,6 +12,17 @@ export const runtime = "nodejs";
 // Vercel can terminate functions that exceed their maximum duration.
 // This setting is respected based on your Vercel plan and project settings.
 export const maxDuration = 60;
+
+
+const AI_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+async function cleanupAiCachesAfterIngest() {
+  const cutoff = new Date(Date.now() - AI_CACHE_TTL_MS);
+  await prisma.digest.deleteMany({ where: { createdAt: { lt: cutoff } } }).catch(() => null);
+  await prisma.itemTranslation
+    .updateMany({ where: { aiSummary: { not: null }, updatedAt: { lt: cutoff } }, data: { aiSummary: null } })
+    .catch(() => null);
+}
 
 function getSigningKeys() {
   const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
@@ -100,8 +112,11 @@ export async function POST(req: Request) {
     }
 
     const result = await ingestOnce();
-    const shouldRetry = !result.ok || (Boolean(result.stats?.stoppedEarly) && Number((result as any).added || 0) === 0);
-return NextResponse.json(result, { status: shouldRetry ? 500 : 200 });
+    // Cleanup AI caches when new content is ingested so the next digest/summary reflects fresh items.
+    await cleanupAiCachesAfterIngest();
+
+    // Treat successful ingests as 200 even if we stopped early; the next scheduled run will catch up.
+    return NextResponse.json(result, { status: result.ok ? 200 : 500 });
   } catch (e: any) {
     console.error("/api/cron/ingest POST failed:", e);
     return NextResponse.json(
@@ -148,8 +163,11 @@ export async function GET(req: Request) {
       }
 
       const result = await ingestOnce();
-      const shouldRetry = !result.ok || (Boolean(result.stats?.stoppedEarly) && Number((result as any).added || 0) === 0);
-return NextResponse.json(result, { status: shouldRetry ? 500 : 200 });
+    // Cleanup AI caches when new content is ingested so the next digest/summary reflects fresh items.
+    await cleanupAiCachesAfterIngest();
+
+    // Treat successful ingests as 200 even if we stopped early; the next scheduled run will catch up.
+    return NextResponse.json(result, { status: result.ok ? 200 : 500 });
     }
     const url = new URL(req.url);
     const token = url.searchParams.get("token");
@@ -179,8 +197,11 @@ return NextResponse.json(result, { status: shouldRetry ? 500 : 200 });
     }
 
     const result = await ingestOnce();
-    const shouldRetry = !result.ok || (Boolean(result.stats?.stoppedEarly) && Number((result as any).added || 0) === 0);
-return NextResponse.json(result, { status: shouldRetry ? 500 : 200 });
+    // Cleanup AI caches when new content is ingested so the next digest/summary reflects fresh items.
+    await cleanupAiCachesAfterIngest();
+
+    // Treat successful ingests as 200 even if we stopped early; the next scheduled run will catch up.
+    return NextResponse.json(result, { status: result.ok ? 200 : 500 });
   } catch (e: any) {
     console.error("/api/cron/ingest GET failed:", e);
     return NextResponse.json(
