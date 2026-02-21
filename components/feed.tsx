@@ -18,6 +18,33 @@ type DigestOutput = {
   watchlist: string[];
 };
 
+function extractKeyPointsFromSummary(summary: string): string[] {
+  const s = String(summary || "");
+  if (!s) return [];
+
+  // Expect the model to keep the English section label "Key points:".
+  const start = s.toLowerCase().indexOf("key points:");
+  if (start < 0) return [];
+  const after = s.slice(start + "key points:".length);
+
+  // Stop at the next known section.
+  const stopCandidates = ["\ncontext:", "\nwhy it matters:", "\ntldr:"];
+  let end = after.length;
+  for (const m of stopCandidates) {
+    const idx = after.toLowerCase().indexOf(m);
+    if (idx >= 0) end = Math.min(end, idx);
+  }
+  const block = after.slice(0, end);
+
+  return block
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => l.replace(/^\d+\s*[\).:-]\s*/, ""))
+    .filter((l) => l.length >= 8)
+    .slice(0, 8);
+}
+
 export function Feed({ section }: { section: Section }) {
   const { status } = useSession();
   const authed = status === "authenticated";
@@ -396,6 +423,25 @@ setLast(new Date().toISOString());
                     <div className="mt-1 text-sm">
                       {aiLoading[it.id] ? t(lang, "generating") : it.aiSummary || ""}
                     </div>
+
+                    {it.aiSummary ? (
+                      (() => {
+                        const pts = extractKeyPointsFromSummary(it.aiSummary);
+                        if (pts.length === 0) return null;
+                        return (
+                          <details className="mt-3 rounded-xl border border-soft bg-black/5 px-3 py-2">
+                            <summary className="cursor-pointer select-none text-xs font-medium text-muted">
+                              {t(lang, "keyPoints")}
+                            </summary>
+                            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                              {pts.map((p, idx) => (
+                                <li key={idx}>{p}</li>
+                              ))}
+                            </ul>
+                          </details>
+                        );
+                      })()
+                    ) : null}
                   </div>
                 ) : null}
               </div>
