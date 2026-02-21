@@ -449,6 +449,8 @@ export async function ingestOnce() {
   let feedsParsed = 0;
   let itemsSeen = 0;
   let candidatesSeen = 0;
+  let aiPickerAttempts = 0;
+  let aiPickerUsed = 0;
   let stoppedEarly = false;
 
   let seedSourcesInserted = 0;
@@ -918,6 +920,7 @@ export async function ingestOnce() {
 
     // Default picker: Gemini (optional). If it fails or is disabled, we fall back to the local score-sorted pool.
     if (!fastMode) {
+      aiPickerAttempts += 1;
       const aiIdx = await aiPickFeedCandidateIndex(
         sec as any,
         pool.map((c) => ({
@@ -933,6 +936,7 @@ export async function ingestOnce() {
       );
 
       if (aiIdx !== null && aiIdx >= 0 && aiIdx < pool.length) {
+        aiPickerUsed += 1;
         const [chosen] = pool.splice(aiIdx, 1);
         if (chosen) pool.unshift(chosen);
       }
@@ -1184,6 +1188,7 @@ export async function ingestOnce() {
       feedsParsed,
       itemsSeen,
       candidatesSeen,
+      aiPicker: { attempts: aiPickerAttempts, used: aiPickerUsed },
       stoppedEarly,
       seedSourcesInserted,
       timingMs: {
