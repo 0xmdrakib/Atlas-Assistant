@@ -6,6 +6,24 @@ import { prisma } from "@/lib/prisma";
 import type { Section } from "@/lib/types";
 import { isTranslateEnabled, translateItemBatch } from "@/lib/translateProvider";
 
+const AI_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+async function maybeCleanupAiCaches() {
+  // Run at most once per hour per server instance.
+  const g = globalThis as any;
+  const now = Date.now();
+  if (typeof g.__atlasLastCleanupAt === "number" && now - g.__atlasLastCleanupAt < AI_CACHE_TTL_MS) return;
+  g.__atlasLastCleanupAt = now;
+
+  const cutoff = new Date(now - AI_CACHE_TTL_MS);
+
+  // Clear stale shared caches so the next click regenerates fresh content.
+  await prisma.digest.deleteMany({ where: { createdAt: { lt: cutoff } } }).catch(() => null);
+  await prisma.itemTranslation
+    .updateMany({ where: { aiSummary: { not: null }, updatedAt: { lt: cutoff } }, data: { aiSummary: null } })
+    .catch(() => null);
+}
+
 const ALLOWED_SECTIONS = new Set<Section>([
   "global",
   "tech",
@@ -29,6 +47,10 @@ export async function GET(req: NextRequest) {
   const lang = (url.searchParams.get("lang") || "en").trim().toLowerCase();
   const section = normalizeSection(url.searchParams.get("section"));
   const days = Math.max(1, Math.min(30, Number(url.searchParams.get("days") || "7")));
+
+  // Keep AI caches aligned with the feed refresh cadence.
+  // If your ingest runs hourly, this will also clear AI summaries/digests hourly.
+  await maybeCleanupAiCaches();
 
   const afterDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
