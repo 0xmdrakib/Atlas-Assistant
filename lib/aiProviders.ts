@@ -1,26 +1,13 @@
 import { languageLabel as uiLanguageLabel } from "@/lib/i18n";
 
 /**
- * Provider-agnostic AI helpers.
- *
- * Supported providers:
- * - Gemini API (default)
- * - OpenAI (legacy / optional)
+ * Gemini-only AI helpers.
  */
-
-export type Provider = "gemini" | "openai";
 
 
 function langLabel(lang?: string): string {
   const key = String(lang || "en").toLowerCase();
   return uiLanguageLabel(key) || "English";
-}
-
-function getProvider(kind: "summary"): Provider {
-  const v = (process.env[`AI_${kind.toUpperCase()}_PROVIDER`] || "").toLowerCase();
-  if (v === "openai") return "openai";
-  // default
-  return "gemini";
 }
 
 function requiredEnv(name: string): string {
@@ -79,8 +66,8 @@ async function geminiGenerateText(args: {
   // Structured output (optional)
   // Gemini REST supports TWO schema mechanisms:
   // - generationConfig.responseSchema (OpenAPI-ish Schema message)
-  // - generationConfig.responseJsonSchema (JSON Schema subset)
-  // We use responseJsonSchema because our schemas are authored as JSON Schema.
+  // - generationConfig._responseJsonSchema (JSON Schema subset)
+  // We use _responseJsonSchema because our schemas are authored as JSON Schema.
   responseMimeType?: string;
   responseSchema?: unknown;
   responseJsonSchema?: unknown;
@@ -111,16 +98,14 @@ async function geminiGenerateText(args: {
     body.systemInstruction = { parts: [{ text: systemInstruction }] };
   }
 
-  // Gemini REST uses lowerCamelCase field names for GenerationConfig.
-  // Keep the request strict: avoid sending duplicate/legacy fields, because
-  // they can cause the server to ignore structured output settings.
+  // Keep the request strict: avoid sending duplicate/legacy fields.
   if (responseMimeType) body.generationConfig.responseMimeType = responseMimeType;
 
-  // IMPORTANT:
-  // If you want JSON Schema (with keywords like additionalProperties), send it via
-  // responseJsonSchema. If you want the protobuf Schema message, use responseSchema.
+  // IMPORTANT (Gemini API):
+  // - For JSON Schema (supports `additionalProperties`), send via `_responseJsonSchema`.
+  // - For the OpenAPI-ish Schema message, send via `responseSchema`.
   // Never set both.
-  if (responseJsonSchema) body.generationConfig.responseJsonSchema = responseJsonSchema;
+  if (responseJsonSchema) body.generationConfig._responseJsonSchema = responseJsonSchema;
   else if (responseSchema) body.generationConfig.responseSchema = responseSchema;
 
   const res = await fetch(url, {
@@ -177,43 +162,14 @@ function safeParseJson<T = any>(raw: string): T | null {
   return null;
 }
 
-async function openaiChatCompletion(args: {
-  apiKey: string;
-  model: string;
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
-  temperature?: number;
-  max_tokens?: number;
-  response_format?: any;
-}): Promise<string> {
-  const { apiKey, model, messages, temperature = 0.2, max_tokens = 500, response_format } = args;
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model, messages, temperature, max_tokens, ...(response_format ? { response_format } : {}) }),
-  });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`OpenAI chat completion failed: ${res.status} ${t}`);
-  }
-  const data: any = await res.json();
-  return String(data?.choices?.[0]?.message?.content || "").trim();
-}
-
 export async function aiSummarizeItem(args: {
   title: string;
   snippet?: string;
   url: string;
   lang?: string;
 }): Promise<string> {
-  const provider = getProvider("summary");
   const key = requiredEnv("AI_SUMMARY_API_KEY");
-  const model =
-    provider === "gemini"
-      ? normalizeGeminiSummaryModel(process.env.AI_SUMMARY_MODEL)
-      : (process.env.AI_SUMMARY_MODEL || "gpt-4o-mini");
+  const model = normalizeGeminiSummaryModel(process.env.AI_SUMMARY_MODEL);
 
   const targetLang = langLabel(args.lang);
   const prompt = `Write a professional, easy-to-skim summary for a high-signal feed.
@@ -243,21 +199,6 @@ TITLE: ${args.title}
 SNIPPET: ${args.snippet || ""}
 URL: ${args.url}`;
 
-  if (provider === "openai") {
-    const out = await openaiChatCompletion({
-      apiKey: key,
-      model,
-      messages: [
-        { role: "system", content: "You write compact, factual summaries." },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.2,
-      max_tokens: 900,
-    });
-
-    return stripAsterisksAndMarkdown(out);
-  }
-
   const out = await geminiGenerateText({
     apiKey: key,
     model,
@@ -286,12 +227,8 @@ export async function aiDigest(args: {
   items: Array<{ title: string; sourceName: string; url: string }>;
   lang?: string;
 }): Promise<string> {
-  const provider = getProvider("summary");
   const key = requiredEnv("AI_SUMMARY_API_KEY");
-  const model =
-    provider === "gemini"
-      ? normalizeGeminiSummaryModel(process.env.AI_SUMMARY_MODEL)
-      : (process.env.AI_SUMMARY_MODEL || "gpt-4o-mini");
+  const model = normalizeGeminiSummaryModel(process.env.AI_SUMMARY_MODEL);
 
   const targetLang = langLabel(args.lang);
   const itemCount = args.items.length;
@@ -367,30 +304,6 @@ ${args.items
     additionalProperties: false,
   };
 
-  if (provider === "openai") {
-    const out = await openaiChatCompletion({
-      apiKey: key,
-      model,
-      messages: [
-        { role: "system", content: "You are a helpful assistant designed to output JSON." },
-        { role: "user", content: prompt },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "AtlasDigest",
-          strict: true,
-          schema,
-        },
-      },
-      temperature: 0.2,
-      max_tokens: 1600,
-    });
-
-    const parsed = safeParseJson<any>(out);
-    return JSON.stringify(normalizeDigest(parsed || { overview: out }));
-  }
-
   const out1 = await geminiGenerateText({
     apiKey: key,
     model,
@@ -425,9 +338,8 @@ export async function aiTranslateBatch(args: {
   lang: string;
   items: Array<{ title: string; summary: string }>;
 }): Promise<Array<{ title: string; summary: string }>> {
-  const provider = getProvider("summary");
   const key = requiredEnv("AI_SUMMARY_API_KEY");
-  const model = process.env.AI_SUMMARY_MODEL || (provider === "gemini" ? "gemini-2.0-flash" : "gpt-4o-mini");
+  const model = normalizeGeminiSummaryModel(process.env.AI_SUMMARY_MODEL);
   const targetLang = langLabel(args.lang);
 
   const prompt = `Translate the following items into ${targetLang}.
@@ -442,21 +354,6 @@ ${args.items
   .slice(0, 12)
   .map((it, idx) => `${idx + 1}. TITLE: ${it.title}\n   SUMMARY: ${it.summary}`)
   .join("\n\n")}`;
-
-  if (provider === "openai") {
-    const out = await openaiChatCompletion({
-      apiKey: key,
-      model,
-      messages: [
-        { role: "system", content: "Return only JSON." },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.2,
-      max_tokens: 900,
-    });
-    const parsed = JSON.parse(out);
-    return Array.isArray(parsed) ? parsed : [];
-  }
 
   const out = await geminiGenerateText({
     apiKey: key,
