@@ -50,7 +50,11 @@ export function buildGenerateContentUrl(model: string, apiKey: string): string {
     );
   }
   const location = getVertexLocation();
-  return `https://aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent?key=${key}`;
+
+  // For regional locations, Google recommends the region-specific API host.
+  // For global, the standard host is used.
+  const host = location && location !== "global" ? `${location}-aiplatform.googleapis.com` : "aiplatform.googleapis.com";
+  return `https://${host}/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent?key=${key}`;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -163,7 +167,9 @@ export async function generateText(args: {
   }
 
   const body: any = {
-    contents: [{ parts: [{ text: prompt }] }],
+    // Vertex AI requires an explicit role on each Content in `contents`.
+    // Supported values: "user" and "model".
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig,
   };
 
