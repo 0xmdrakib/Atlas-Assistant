@@ -1,4 +1,5 @@
 import { languageLabel as uiLanguageLabel } from "@/lib/i18n";
+import { generateText as geminiGenerateText } from "@/lib/geminiHttp";
 
 /**
  * Gemini-only AI helpers.
@@ -56,75 +57,8 @@ function sanitizeSingleLine(input: string): string {
   return stripAsterisksAndMarkdown(input).replace(/\s+/g, " ").trim();
 }
 
-async function geminiGenerateText(args: {
-  apiKey: string;
-  model: string;
-  prompt: string;
-  systemInstruction?: string;
-  temperature?: number;
-  maxOutputTokens?: number;
-  // Structured output (optional)
-  // Gemini REST supports TWO schema mechanisms:
-  // - generationConfig.responseSchema (OpenAPI-ish Schema message)
-  // - generationConfig._responseJsonSchema (JSON Schema subset)
-  // We use _responseJsonSchema because our schemas are authored as JSON Schema.
-  responseMimeType?: string;
-  responseSchema?: unknown;
-  responseJsonSchema?: unknown;
-}): Promise<string> {
-  const {
-    apiKey,
-    model,
-    prompt,
-    systemInstruction,
-    temperature = 0.2,
-    maxOutputTokens = 500,
-    responseMimeType,
-    responseSchema,
-    responseJsonSchema,
-  } = args;
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const body: any = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature,
-      maxOutputTokens,
-    },
-  };
-
-  if (systemInstruction) {
-    body.systemInstruction = { parts: [{ text: systemInstruction }] };
-  }
-
-  // Keep the request strict: avoid sending duplicate/legacy fields.
-  if (responseMimeType) body.generationConfig.responseMimeType = responseMimeType;
-
-  // IMPORTANT (Gemini API):
-  // - For JSON Schema (supports `additionalProperties`), send via `_responseJsonSchema`.
-  // - For the OpenAPI-ish Schema message, send via `responseSchema`.
-  // Never set both.
-  if (responseJsonSchema) body.generationConfig._responseJsonSchema = responseJsonSchema;
-  else if (responseSchema) body.generationConfig.responseSchema = responseSchema;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`Gemini generateContent failed: ${res.status} ${t}`);
-  }
-  const data: any = await res.json();
-  const text =
-    data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text || "").join("") ||
-    data?.candidates?.[0]?.output ||
-    "";
-  return String(text || "").trim();
-}
+// NOTE: Gemini HTTP transport lives in lib/geminiHttp.ts so it can be shared with
+// summary, feed picker, and translation.
 
 function safeParseJson<T = any>(raw: string): T | null {
   const attempt = (s: string): T | null => {
@@ -206,6 +140,8 @@ URL: ${args.url}`;
     systemInstruction: "You write compact, factual summaries.",
     temperature: 0.2,
     maxOutputTokens: 1000,
+    timeoutMs: 25_000,
+    retries: 1,
   });
 
   return stripAsterisksAndMarkdown(out);
@@ -313,6 +249,8 @@ ${args.items
     maxOutputTokens: 1600,
     responseMimeType: "application/json",
     responseJsonSchema: schema,
+    timeoutMs: 35_000,
+    retries: 1,
   });
 
   const parsed1 = safeParseJson<any>(out1);
@@ -328,6 +266,8 @@ ${args.items
     maxOutputTokens: 2200,
     responseMimeType: "application/json",
     responseJsonSchema: schema,
+    timeoutMs: 35_000,
+    retries: 1,
   });
 
   const parsed2 = safeParseJson<any>(out2);
@@ -374,6 +314,8 @@ ${args.items
         required: ["title", "summary"],
       },
     },
+    timeoutMs: 30_000,
+    retries: 1,
   });
 
   const parsed = JSON.parse(out);
