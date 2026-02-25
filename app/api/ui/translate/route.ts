@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 
 import { UI_EN, languageByCode } from "@/lib/i18n";
 import { isTranslateEnabled } from "@/lib/translateProvider";
+import { generateText as geminiGenerateText } from "@/lib/geminiHttp";
 
 function languageForPrompt(lang: string): { label: string; nativeLabel?: string } {
   const L = languageByCode(lang);
@@ -11,8 +12,8 @@ function languageForPrompt(lang: string): { label: string; nativeLabel?: string 
 }
 
 async function geminiTranslateUiDict(targetLang: string): Promise<Record<string, string>> {
-  const apiKey = process.env.AI_TRANSLATE_API_KEY || process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("Missing required env var: AI_TRANSLATE_API_KEY (or GEMINI_API_KEY)");
+  const apiKey = process.env.AI_TRANSLATE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error("Missing required env var: AI_TRANSLATE_API_KEY (or GEMINI_API_KEY / GOOGLE_API_KEY)");
 
   const model = process.env.AI_TRANSLATE_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
@@ -34,30 +35,18 @@ async function geminiTranslateUiDict(targetLang: string): Promise<Record<string,
     additionalProperties: { type: "string" },
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const body = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.2,
-      maxOutputTokens: 4096,
-      responseMimeType: "application/json",
-      responseJsonSchema: schema,
-    },
-  };
-
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const text = await geminiGenerateText({
+    apiKey,
+    model,
+    prompt,
+    systemInstruction: "Return only JSON.",
+    temperature: 0.2,
+    maxOutputTokens: 4096,
+    responseMimeType: "application/json",
+    responseSchema: schema,
+    timeoutMs: 25_000,
+    retries: 1,
   });
-
-  if (!r.ok) {
-    const t = await r.text().catch(() => "");
-    throw new Error(`Gemini UI translate failed: ${r.status} ${t}`);
-  }
-
-  const data = await r.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Gemini UI translate returned no text");
 
   const parsed = JSON.parse(String(text).trim());
