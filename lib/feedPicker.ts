@@ -1,4 +1,5 @@
 import type { Section } from "@/lib/types";
+import { generateText as geminiGenerateText } from "@/lib/geminiHttp";
 
 export type FeedPickCandidate = {
   title: string;
@@ -68,58 +69,31 @@ async function geminiPickIndex(args: {
     additionalProperties: false,
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const body: any = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 64,
-        response_mime_type: "application/json",
-        response_json_schema: schema,
-        responseMimeType: "application/json",
-        responseJsonSchema: schema,
-      },
-    };
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+  const raw = await geminiGenerateText({
+      apiKey,
+      model,
+      prompt,
+      systemInstruction: "Return only JSON.",
+      temperature: 0.1,
+      maxOutputTokens: 64,
+      responseMimeType: "application/json",
+      responseSchema: schema,
+      timeoutMs,
+      retries: 1,
     });
 
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      throw new Error(`Gemini feed picker failed: ${res.status} ${txt}`);
-    }
+  if (!raw) return null;
 
-    const data: any = await res.json();
-    const text =
-      data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text || "").join("") ||
-      data?.candidates?.[0]?.output ||
-      "";
+  const parsed: any = JSON.parse(String(raw).trim());
+  const idx = parsed?.pickIndex;
 
-    const raw = String(text || "").trim();
-    if (!raw) return null;
+  if (idx === null || typeof idx === "undefined") return null;
+  const n = Number(idx);
+  if (!Number.isFinite(n)) return null;
 
-    const parsed: any = JSON.parse(raw);
-    const idx = parsed?.pickIndex;
-
-    if (idx === null || typeof idx === "undefined") return null;
-    const n = Number(idx);
-    if (!Number.isFinite(n)) return null;
-
-    // Defensive clamp.
-    const i = clamp(Math.trunc(n), 0, candidates.length - 1);
-    return i;
-  } finally {
-    clearTimeout(t);
-  }
+  // Defensive clamp.
+  const i = clamp(Math.trunc(n), 0, candidates.length - 1);
+  return i;
 }
 
 export async function aiPickFeedCandidateIndex(section: Section, candidates: FeedPickCandidate[]): Promise<number | null> {
