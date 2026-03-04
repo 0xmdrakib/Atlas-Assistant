@@ -78,7 +78,7 @@ export function TabShell({ children }: { children: React.ReactNode }) {
       {children}
 
       <footer className="mt-10 flex items-center justify-center text-center text-xs text-muted">
-        © 2026 Md. Rakib • made with love and passion • All Rights Reserved.
+        © 2026 Md. Rakib • made with love and passion.
       </footer>
     </div>
   );
