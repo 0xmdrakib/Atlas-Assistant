@@ -71,4 +71,3 @@ MIT — see the `LICENSE` file.
 
 This project is **free to use** right now — try it:
 https://atlasassistant.online
-[README.professional.md](https://github.com/user-attachments/files/25731131/README.professional.md)
