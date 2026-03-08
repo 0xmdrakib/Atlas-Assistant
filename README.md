@@ -4,7 +4,7 @@
 
 Atlas Assistant is a calm, high‑signal news portal that turns chaos into clarity.
 
-**Live demo:** https://atlasassistant.online
+**Live app:** https://atlasassistant.online
 
 ---
 
@@ -36,24 +36,36 @@ Pick a **Country** + **Topic** + **time window (1d / 7d)** and Atlas curates the
 
 ---
 
-## Quick start (local dev)
+## Getting started
+
+### 1. Install dependencies
 
 ```bash
 npm install
-npm run dev
 ```
 
-### One-command setup (DB + sources + ingest)
+### 2. Configure environment variables
+
+Create a `.env` file in the project root. then fill all env from [.env.example](./.env.example).
+
+### 3. One-command setup (DB + sources + ingest)
 
 ```bash
 npm run setup
 ```
 
+### 4. Run the development server
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000` in your browser.
+
 ### Useful scripts
 
 ```bash
 npm run ingest        # run one ingest pass
-npm run ingest:loop   # keep ingesting in a loop
 npm run sources:sync  # sync source list
 npm run db:migrate    # prisma db push --skip-generate
 npm run db:seed       # seed the database
@@ -63,11 +75,4 @@ npm run db:seed       # seed the database
 
 ## License
 
-MIT — see the `LICENSE` file.
-
----
-
-## Notes
-
-This project is **free to use** right now — try it:
-https://atlasassistant.online
+This project is licensed under the [MIT License](./LICENSE).
