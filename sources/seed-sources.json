@@ -1214,7 +1214,7 @@
     "type": "rss",
     "url": "https://productivemuslim.com/feed/",
     "trustScore": 80,
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "faith",
@@ -1222,7 +1222,7 @@
     "type": "rss",
     "url": "https://quran.com/blog/rss.xml",
     "trustScore": 78,
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "faith",
@@ -1238,7 +1238,7 @@
     "type": "rss",
     "url": "https://themuslimvibe.com/feed",
     "trustScore": 75,
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "faith",
@@ -1247,6 +1247,42 @@
     "url": "https://yaqeeninstitute.org/feed/",
     "trustScore": 90,
     "country": "US",
+    "enabled": false
+  },
+  {
+    "section": "faith",
+    "name": "Islam21c",
+    "type": "rss",
+    "url": "https://www.islam21c.com/feed/",
+    "trustScore": 84,
+    "country": "GB",
+    "enabled": true
+  },
+  {
+    "section": "faith",
+    "name": "OnePath Network",
+    "type": "rss",
+    "url": "https://onepathnetwork.com/feed/",
+    "trustScore": 78,
+    "country": "AU",
+    "enabled": true
+  },
+  {
+    "section": "faith",
+    "name": "Sapience Institute",
+    "type": "rss",
+    "url": "https://sapienceinstitute.org/feed/",
+    "trustScore": 84,
+    "country": "GB",
+    "enabled": true
+  },
+  {
+    "section": "faith",
+    "name": "Islam Channel",
+    "type": "rss",
+    "url": "https://www.islamchannel.tv/feed/",
+    "trustScore": 76,
+    "country": "GB",
     "enabled": true
   }
 ]
