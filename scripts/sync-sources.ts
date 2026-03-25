@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import type { Section } from "@/lib/types";
+import nextEnv from "@next/env";
 
 import fs from "node:fs";
 import path from "node:path";
 import { XMLParser } from "fast-xml-parser";
+
+const { loadEnvConfig } = nextEnv;
+loadEnvConfig(process.cwd());
 
 type PackConfig = {
   enabled: boolean;
