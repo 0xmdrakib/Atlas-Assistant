@@ -892,7 +892,7 @@ export async function ingestOnce() {
     early: 30,
     creators: 180,
     universe: 90,
-    history: 3650,
+    history: 365,
     faith: 180,
   };
 
