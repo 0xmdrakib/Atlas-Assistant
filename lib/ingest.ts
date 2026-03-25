@@ -322,6 +322,36 @@ function scoreCandidate(
   return clamp(score, 0, 1);
 }
 
+type SourceHealthTier = "healthy" | "probation" | "unhealthy";
+
+function sourceHealthTier(source: { consecutiveFails?: number | null; lastOkAt?: Date | string | null }): SourceHealthTier {
+  const fails = Math.max(0, Number(source?.consecutiveFails || 0));
+  const rawLastOk = source?.lastOkAt ? new Date(source.lastOkAt) : null;
+  const lastOk = rawLastOk && !Number.isNaN(rawLastOk.getTime()) ? rawLastOk : null;
+
+  if (fails === 0) return "healthy";
+  if (!lastOk) return fails >= 3 ? "unhealthy" : "probation";
+
+  const okAgeHours = hoursBetween(new Date(), lastOk);
+  if (fails >= 5) return "unhealthy";
+  if (fails >= 3 && okAgeHours > 24 * 21) return "unhealthy";
+  if (fails <= 2 && okAgeHours <= 24 * 14) return "healthy";
+  return "probation";
+}
+
+function rankFallbackCandidates(
+  section: CanonicalSection,
+  candidates: Array<{ title: string; snippet: string; url: string; publishedAt: Date }>
+) {
+  return candidates
+    .map((candidate) => ({
+      ...candidate,
+      rank: scoreCandidate(section, 70, candidate.title, candidate.snippet, candidate.publishedAt, false),
+    }))
+    .sort((a, b) => (b.rank - a.rank) || (b.publishedAt.getTime() - a.publishedAt.getTime()))
+    .map(({ rank, ...candidate }) => candidate);
+}
+
 function safeDate(item: FeedItem) {
   const d = item.isoDate || item.pubDate;
   const parsed = d ? new Date(d) : null;
@@ -384,28 +414,44 @@ type IngestCandidate = {
   country: string | null;
 };
 
-async function syncSeedSourcesIntoDb(): Promise<{ inserted: number }> {
-  const syncEnabled = envBool("SOURCE_SYNC_ENABLED", false);
-  if (!syncEnabled) return { inserted: 0 };
+async function syncSeedSourcesIntoDb(): Promise<{ synced: number }> {
+  const syncEnabled = envBool("SOURCE_SYNC_ENABLED", true);
+  if (!syncEnabled) return { synced: 0 };
 
-  // Upsert *missing* seed sources into the DB (no updates to existing rows).
-  // This is intentionally lightweight so it can run as part of the ingest cron.
+  // Keep the curated seed list authoritative so feed fixes propagate without
+  // requiring a manual DB reset or one-off sync job.
   const rssSeed = seedSources.filter((src: any) => String(src?.type || "").toLowerCase() === "rss");
-  if (rssSeed.length === 0) return { inserted: 0 };
+  if (rssSeed.length === 0) return { synced: 0 };
 
-  const res = await prisma.source.createMany({
-    data: rssSeed.map((src: any) => ({
-      section: src.section,
-      name: src.name,
-      url: src.url,
-      type: src.type,
-      trustScore: src.trustScore ?? 50,
-enabled: src.enabled ?? true,
-    })),
-    skipDuplicates: true,
-  });
+  let synced = 0;
+  for (const src of rssSeed) {
+    const url = String(src?.url || "").trim();
+    if (!url) continue;
 
-  return { inserted: res.count ?? 0 };
+    await prisma.source.upsert({
+      where: { url },
+      update: {
+        section: toCanonicalSection(String(src?.section || "")),
+        name: String(src?.name || url),
+        type: "rss",
+        country: src?.country ? String(src.country).toUpperCase() : null,
+        trustScore: typeof src?.trustScore === "number" ? src.trustScore : 70,
+        enabled: src?.enabled !== false,
+      },
+      create: {
+        section: toCanonicalSection(String(src?.section || "")),
+        name: String(src?.name || url),
+        type: "rss",
+        url,
+        country: src?.country ? String(src.country).toUpperCase() : null,
+        trustScore: typeof src?.trustScore === "number" ? src.trustScore : 70,
+        enabled: src?.enabled !== false,
+      },
+    });
+    synced += 1;
+  }
+
+  return { synced };
 }
 
 async function ensureSeedSourcesInDb(): Promise<{ seeded: boolean; inserted: number }> {
@@ -453,7 +499,7 @@ export async function ingestOnce() {
   let aiPickerUsed = 0;
   let stoppedEarly = false;
 
-  let seedSourcesInserted = 0;
+  let seedSourcesSynced = 0;
 
   const hardDeadlineMs = clamp(Number(process.env.INGEST_TIMEOUT_MS || 25000), 8000, 120000);
   const hardDeadlineAt = Date.now() + hardDeadlineMs;
@@ -484,9 +530,9 @@ export async function ingestOnce() {
     data: { enabled: true, consecutiveFails: 0 },
   });
 
-  // Keep the DB in sync with sources/seed-sources.json (adds missing sources only).
+  // Keep the DB in sync with sources/seed-sources.json so source fixes land automatically.
   try {
-    seedSourcesInserted = (await syncSeedSourcesIntoDb()).inserted;
+    seedSourcesSynced = (await syncSeedSourcesIntoDb()).synced;
   } catch (e) {
     console.warn("syncSeedSourcesIntoDb failed", e);
   }
@@ -528,6 +574,19 @@ export async function ingestOnce() {
     faith: new Set(),
   };
 
+  const latestCollectedAtBySection: Record<CanonicalSection, Date | null> = {
+    global: null,
+    tech: null,
+    innovators: null,
+    early: null,
+    creators: null,
+    universe: null,
+    history: null,
+    faith: null,
+  };
+  const sectionStaleHours = clamp(Number(process.env.INGEST_SECTION_STALE_HOURS || 6), 1, 168);
+  const sectionStaleSince = new Date(now - sectionStaleHours * 60 * 60 * 1000);
+
 
   const recentItems = await prisma.item.findMany({
     where: {
@@ -541,6 +600,9 @@ export async function ingestOnce() {
     const sec = toCanonicalSection(it.section);
     const bucket = state[sec];
     if (!bucket) continue;
+    if (!latestCollectedAtBySection[sec] || it.createdAt > latestCollectedAtBySection[sec]!) {
+      latestCollectedAtBySection[sec] = it.createdAt;
+    }
     if (noRepeatHours > 0 && it.createdAt >= noRepeatSince && (it as any).url) recentUrlBySection[sec].add((it as any).url);
     if (sourceCooldownHours > 0 && it.createdAt >= sourceCooldownSince) recentSourceBySection[sec].add((it as any).sourceId);
     if (it.createdAt >= dayAgo) bucket.dayCount += 1;
@@ -656,6 +718,19 @@ export async function ingestOnce() {
   for (const sec of sections) {
     const policy = SECTION_POLICIES[sec];
     const base = sourcesBySection[sec] || [];
+    const healthBuckets: Record<SourceHealthTier, any[]> = {
+      healthy: [],
+      probation: [],
+      unhealthy: [],
+    };
+    for (const source of base) {
+      healthBuckets[sourceHealthTier(source)].push(source);
+    }
+    const rankedBase = [
+      ...healthBuckets.healthy,
+      ...healthBuckets.probation,
+      ...healthBuckets.unhealthy,
+    ];
 
     // Core fix: don't "lock" the pool to only high-trust sources.
     // Instead, sample mostly trusted sources but always include some of the rest,
@@ -667,7 +742,7 @@ export async function ingestOnce() {
       60
     );
 
-    const window = base.slice(0, selectionWindow);
+    const window = rankedBase.slice(0, selectionWindow);
     const trusted = window.filter((s) => (s.trustScore || 0) >= policy.minTrustScore);
     const untrusted = window.filter((s) => (s.trustScore || 0) < policy.minTrustScore);
 
@@ -689,7 +764,7 @@ export async function ingestOnce() {
     // If the window itself is too short, fill from the rest of the section sources.
     if (pool.length < perSection) {
       const already = new Set(pool.map((s) => s.id));
-      for (const s of base) {
+      for (const s of rankedBase) {
         if (already.has(s.id)) continue;
         pool.push(s);
         if (pool.length >= perSection) break;
@@ -749,7 +824,6 @@ export async function ingestOnce() {
   }
 
   async function googleNewsCandidates(section: CanonicalSection) {
-    if (section === "faith") return [];
     // A pragmatic fallback: Google News RSS is resilient when publisher RSS endpoints
     // are blocked or unavailable from serverless environments.
     const queryMap: Record<CanonicalSection, string> = {
@@ -760,7 +834,7 @@ export async function ingestOnce() {
       creators: "open source release OR tutorial OR new library",
       universe: "NASA OR telescope OR exoplanet",
       history: "history archaeology empire",
-      faith: "quran OR hadith OR fiqh",
+      faith: "quran OR hadith OR fiqh OR khutbah OR ramadan",
     };
 
     const q = encodeURIComponent(queryMap[section] || "news");
@@ -768,6 +842,7 @@ export async function ingestOnce() {
     const xml = await fetchText(url, 12_000);
     const feed: any = await parser.parseString(xml);
     const items = (feed?.items || []) as FeedItem[];
+    const seenUrls = new Set<string>();
     return items
       .map((it) => ({
         title: String(it.title || "").trim(),
@@ -776,6 +851,13 @@ export async function ingestOnce() {
         snippet: String(it.contentSnippet || it.content || "").replace(/\s+/g, " ").trim().slice(0, 240),
       }))
       .filter((x) => x.title && x.url)
+      .filter((x) => {
+        const normalized = normalizeUrl(x.url);
+        if (!normalized || seenUrls.has(normalized)) return false;
+        seenUrls.add(normalized);
+        return true;
+      })
+      .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
       .slice(0, 20);
   }
 
@@ -980,7 +1062,7 @@ export async function ingestOnce() {
     }
   }
 
-  // Safety net: if a section is totally empty, seed a few items from public GDELT.
+  // Safety net: if a section has gone stale, seed one item from resilient public fallbacks.
   for (const sec of sections) {
     if (Date.now() > hardDeadlineAt - (fastMode ? 900 : 2200)) {
       stoppedEarly = true;
@@ -988,7 +1070,8 @@ export async function ingestOnce() {
     }
 
     const policy = SECTION_POLICIES[sec];
-    if (state[sec].monthCount > 0) continue;
+    const lastCollectedAt = latestCollectedAtBySection[sec];
+    if (lastCollectedAt && lastCollectedAt >= sectionStaleSince) continue;
     if (addedThisRun[sec] >= 1) continue;
 
     const fallbackUrl = `gdelt:fallback:${sec}`;
@@ -1006,10 +1089,10 @@ export async function ingestOnce() {
     });
 
     const gd = await gdeltCandidates(sec).catch(() => []);
-    let chosen = gd.slice(0, 1);
+    let chosen = rankFallbackCandidates(sec as CanonicalSection, gd).slice(0, 1);
     if (chosen.length === 0) {
       const gn = await googleNewsCandidates(sec as CanonicalSection).catch(() => []);
-      chosen = gn.slice(0, 1);
+      chosen = rankFallbackCandidates(sec as CanonicalSection, gn).slice(0, 1);
     }
     for (const g of chosen) {
       if (state[sec].dayCount >= policy.dailyCap) break;
@@ -1167,7 +1250,7 @@ export async function ingestOnce() {
     prisma.source.count({ where: { type: { equals: "rss", mode: "insensitive" }, enabled: true } }),
   ]);
 
-  const message = `ok rssEnabled=${rssEnabled} rssTotal=${rssTotal} selected=${selectedCount} fallbackAdded=${fallbackAdded} seedSourcesInserted=${seedSourcesInserted}`;
+  const message = `ok rssEnabled=${rssEnabled} rssTotal=${rssTotal} selected=${selectedCount} fallbackAdded=${fallbackAdded} seedSourcesSynced=${seedSourcesSynced}`;
 
   await prisma.ingestRun.update({
     where: { id: run.id },
@@ -1190,7 +1273,7 @@ export async function ingestOnce() {
       candidatesSeen,
       aiPicker: { attempts: aiPickerAttempts, used: aiPickerUsed },
       stoppedEarly,
-      seedSourcesInserted,
+      seedSourcesSynced,
       timingMs: {
         budget: hardDeadlineMs,
         elapsed: Date.now() - startedAtMs,
