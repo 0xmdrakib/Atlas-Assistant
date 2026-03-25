@@ -1049,7 +1049,7 @@
     "url": "https://www.archaeology.org/rss/xml",
     "trustScore": 82,
     "country": "US",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1058,7 +1058,7 @@
     "url": "https://blogs.bl.uk/asian-and-african/rss.xml",
     "trustScore": 80,
     "country": "UK",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1067,7 +1067,7 @@
     "url": "https://blog.britishmuseum.org/feed/",
     "trustScore": 82,
     "country": "GB",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1075,7 +1075,7 @@
     "type": "rss",
     "url": "https://news.google.com/rss/search?q=history+OR+archaeology+OR+islamic+history+OR+caliphate+OR+ottoman&hl=en&gl=US&ceid=US:en",
     "trustScore": 80,
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1084,7 +1084,7 @@
     "url": "https://islamicstudies.harvard.edu/rss.xml?term=175863",
     "trustScore": 85,
     "country": "US",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1092,7 +1092,7 @@
     "type": "rss",
     "url": "https://historynewsnetwork.org/rss.xml",
     "trustScore": 85,
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1110,7 +1110,7 @@
     "url": "https://blog.khanacademy.org/category/world-history/feed/",
     "trustScore": 75,
     "country": "US",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1119,7 +1119,7 @@
     "url": "https://blogs.loc.gov/feed/",
     "trustScore": 82,
     "country": "US",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1136,7 +1136,7 @@
     "url": "https://www.metmuseum.org/rss/articles",
     "trustScore": 80,
     "country": "US",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1145,7 +1145,7 @@
     "url": "https://www.metmuseum.org/blogs/rss",
     "trustScore": 80,
     "country": "US",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1154,7 +1154,7 @@
     "url": "https://www.qdl.qa/en/rss.xml",
     "trustScore": 80,
     "country": "QA",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1163,7 +1163,7 @@
     "url": "https://www.smithsonianmag.com/history/feed/",
     "trustScore": 82,
     "country": "US",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1171,7 +1171,7 @@
     "type": "rss",
     "url": "https://www.smithsonianmag.com/category/history/feed/",
     "trustScore": 90,
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
@@ -1180,13 +1180,49 @@
     "url": "https://theconversation.com/uk/history/feed",
     "trustScore": 82,
     "country": "GB",
-    "enabled": true
+    "enabled": false
   },
   {
     "section": "history",
     "name": "The National Archives (UK)",
     "type": "rss",
     "url": "https://blog.nationalarchives.gov.uk/feed/",
+    "trustScore": 82,
+    "country": "GB",
+    "enabled": false
+  },
+  {
+    "section": "history",
+    "name": "HistoryExtra",
+    "type": "rss",
+    "url": "https://www.historyextra.com/feed",
+    "trustScore": 86,
+    "country": "GB",
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "World History Encyclopedia",
+    "type": "rss",
+    "url": "https://www.worldhistory.org/rss2/?lang=en",
+    "trustScore": 88,
+    "country": "INT",
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "The Public Domain Review",
+    "type": "rss",
+    "url": "https://publicdomainreview.org/rss.xml",
+    "trustScore": 84,
+    "country": "GB",
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "History Workshop",
+    "type": "rss",
+    "url": "https://www.historyworkshop.org.uk/feed/",
     "trustScore": 82,
     "country": "GB",
     "enabled": true
