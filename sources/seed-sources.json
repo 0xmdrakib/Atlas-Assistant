@@ -1105,15 +1105,6 @@
   },
   {
     "section": "history",
-    "name": "Khan Academy - World History",
-    "type": "rss",
-    "url": "https://blog.khanacademy.org/category/world-history/feed/",
-    "trustScore": 75,
-    "country": "US",
-    "enabled": true
-  },
-  {
-    "section": "history",
     "name": "Library of Congress",
     "type": "rss",
     "url": "https://blogs.loc.gov/feed/",
@@ -1131,24 +1122,6 @@
   },
   {
     "section": "history",
-    "name": "Met Museum",
-    "type": "rss",
-    "url": "https://www.metmuseum.org/rss/articles",
-    "trustScore": 80,
-    "country": "US",
-    "enabled": true
-  },
-  {
-    "section": "history",
-    "name": "Met Museum - The Met",
-    "type": "rss",
-    "url": "https://www.metmuseum.org/blogs/rss",
-    "trustScore": 80,
-    "country": "US",
-    "enabled": true
-  },
-  {
-    "section": "history",
     "name": "Qatar Digital Library - Articles",
     "type": "rss",
     "url": "https://www.qdl.qa/en/rss.xml",
@@ -1160,7 +1133,7 @@
     "section": "history",
     "name": "Smithsonian History",
     "type": "rss",
-    "url": "https://www.smithsonianmag.com/history/feed/",
+    "url": "https://www.smithsonianmag.com/rss/history/full/",
     "trustScore": 82,
     "country": "US",
     "enabled": true
@@ -1218,14 +1191,6 @@
   },
   {
     "section": "faith",
-    "name": "Quran.com Blog",
-    "type": "rss",
-    "url": "https://quran.com/blog/rss.xml",
-    "trustScore": 78,
-    "enabled": true
-  },
-  {
-    "section": "faith",
     "name": "SeekersGuidance",
     "type": "rss",
     "url": "https://seekersguidance.org/feed/",
@@ -1238,15 +1203,6 @@
     "type": "rss",
     "url": "https://themuslimvibe.com/feed",
     "trustScore": 75,
-    "enabled": true
-  },
-  {
-    "section": "faith",
-    "name": "Yaqeen Institute",
-    "type": "rss",
-    "url": "https://yaqeeninstitute.org/feed/",
-    "trustScore": 90,
-    "country": "US",
     "enabled": true
   },
   {
