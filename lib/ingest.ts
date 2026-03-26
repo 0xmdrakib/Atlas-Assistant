@@ -339,8 +339,8 @@ async function gdeltCandidates(section: string): Promise<
     early: "patent OR preprint OR arXiv OR filing",
     creators: "open-source OR tutorial OR course OR community",
     universe: "NASA OR telescope OR exoplanet OR galaxy",
-    history: "islamic history OR ottoman OR andalus OR caliphate",
-    faith: "Quran OR Hadith OR sunnah OR fiqh",
+    history: "history OR archaeology OR ancient civilization OR islamic history OR ottoman OR andalus OR caliphate",
+    faith: "Islam OR Quran OR Hadith OR sunnah OR fiqh OR dua OR mosque OR Ramadan",
   };
   const q = encodeURIComponent(queryMap[section] || queryMap.global);
   // Keep in sync with discovery: mode=artlist + sort=datedesc.
@@ -749,7 +749,6 @@ export async function ingestOnce() {
   }
 
   async function googleNewsCandidates(section: CanonicalSection) {
-    if (section === "faith") return [];
     // A pragmatic fallback: Google News RSS is resilient when publisher RSS endpoints
     // are blocked or unavailable from serverless environments.
     const queryMap: Record<CanonicalSection, string> = {
@@ -759,8 +758,13 @@ export async function ingestOnce() {
       early: "arXiv OR preprint OR patent filing",
       creators: "open source release OR tutorial OR new library",
       universe: "NASA OR telescope OR exoplanet",
-      history: "history archaeology empire",
-      faith: "quran OR hadith OR fiqh",
+      history: "history OR archaeology OR ancient OR museum OR empire OR caliphate OR ottoman OR andalus",
+      faith: "Islam OR Quran OR Hadith OR fiqh OR dua OR mosque OR Ramadan OR Islamic guidance",
+    };
+
+    const keywordGate: Partial<Record<CanonicalSection, string[]>> = {
+      history: ["history", "archaeolog", "ancient", "museum", "empire", "dynasty", "caliphate", "ottoman", "andalus"],
+      faith: ["islam", "muslim", "quran", "hadith", "sunnah", "fiqh", "dua", "dhikr", "mosque", "ramadan", "eid", "imam"],
     };
 
     const q = encodeURIComponent(queryMap[section] || "news");
@@ -768,6 +772,8 @@ export async function ingestOnce() {
     const xml = await fetchText(url, 12_000);
     const feed: any = await parser.parseString(xml);
     const items = (feed?.items || []) as FeedItem[];
+    const allow = keywordGate[section];
+
     return items
       .map((it) => ({
         title: String(it.title || "").trim(),
@@ -776,6 +782,11 @@ export async function ingestOnce() {
         snippet: String(it.contentSnippet || it.content || "").replace(/\s+/g, " ").trim().slice(0, 240),
       }))
       .filter((x) => x.title && x.url)
+      .filter((x) => {
+        if (!allow || allow.length === 0) return true;
+        const text = `${x.title} ${x.snippet}`.toLowerCase();
+        return allow.some((kw) => text.includes(kw));
+      })
       .slice(0, 20);
   }
 
@@ -980,7 +991,11 @@ export async function ingestOnce() {
     }
   }
 
-  // Safety net: if a section is totally empty, seed a few items from public GDELT.
+  // Safety net: backfill sections that missed this run.
+  // For history + faith we allow a public backfill every missed hour because those
+  // sections naturally publish more unevenly than the faster-moving tabs.
+  const hourlyBackfillSections = new Set<CanonicalSection>(["history", "faith"]);
+
   for (const sec of sections) {
     if (Date.now() > hardDeadlineAt - (fastMode ? 900 : 2200)) {
       stoppedEarly = true;
@@ -988,8 +1003,12 @@ export async function ingestOnce() {
     }
 
     const policy = SECTION_POLICIES[sec];
-    if (state[sec].monthCount > 0) continue;
-    if (addedThisRun[sec] >= 1) continue;
+    const allowHourlyBackfill = hourlyBackfillSections.has(sec as CanonicalSection);
+    const needsBackfill = addedThisRun[sec] < 1 && (state[sec].monthCount === 0 || allowHourlyBackfill);
+    if (!needsBackfill) continue;
+    if (state[sec].dayCount >= policy.dailyCap) continue;
+    if (state[sec].weekCount >= policy.weeklyCap) continue;
+    if (sec === "history" && state[sec].monthCount >= policy.monthlyCap) continue;
 
     const fallbackUrl = `gdelt:fallback:${sec}`;
     const fallbackSource = await prisma.source.upsert({
@@ -1006,20 +1025,28 @@ export async function ingestOnce() {
     });
 
     const gd = await gdeltCandidates(sec).catch(() => []);
-    let chosen = gd.slice(0, 1);
-    if (chosen.length === 0) {
-      const gn = await googleNewsCandidates(sec as CanonicalSection).catch(() => []);
-      chosen = gn.slice(0, 1);
+    const gn = await googleNewsCandidates(sec as CanonicalSection).catch(() => []);
+    const deduped = new Map<string, { title: string; snippet: string; url: string; publishedAt: Date }>();
+
+    for (const cand of [...gd, ...gn]) {
+      const url = normalizeUrl(cand.url);
+      if (!url) continue;
+      if (noRepeatHours > 0 && recentUrlBySection[sec].has(url)) continue;
+      if (!deduped.has(url)) deduped.set(url, { ...cand, url });
     }
+
+    const chosen = Array.from(deduped.values())
+      .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
+      .slice(0, 5);
+
     for (const g of chosen) {
       if (state[sec].dayCount >= policy.dailyCap) break;
       if (state[sec].weekCount >= policy.weeklyCap) break;
       if (sec === "history" && state[sec].monthCount >= policy.monthlyCap) break;
+
       try {
-        addedThisRun[sec] = 1;
-        await prisma.item.upsert({
-          where: { url: g.url },
-          create: {
+        await prisma.item.create({
+          data: {
             sourceId: fallbackSource.id,
             section: sec,
             title: g.title,
@@ -1031,23 +1058,22 @@ export async function ingestOnce() {
             score: 0.76,
             publishedAt: g.publishedAt,
           },
-          update: {
-            sourceId: fallbackSource.id,
-            section: sec,
-            title: g.title,
-            summary: g.snippet || g.title,
-            score: 0.76,
-            publishedAt: g.publishedAt,
-            // Same "collectedAt" semantics for fallback items.
-            createdAt: new Date(),
-          },
         });
+
+        addedThisRun[sec] = 1;
         added += 1;
         fallbackAdded += 1;
         bumpWindowCounts(sec, new Date());
-      } catch {
+        if (noRepeatHours > 0) recentUrlBySection[sec].add(g.url);
+        break;
+      } catch (e: any) {
+        const code = e?.code || "";
+        const msg = String(e || "");
+        const isUnique = code === "P2002" || msg.includes("P2002") || msg.toLowerCase().includes("unique");
+        if (isUnique) continue;
         addedThisRun[sec] = 0;
         skipped += 1;
+        break;
       }
     }
   }
