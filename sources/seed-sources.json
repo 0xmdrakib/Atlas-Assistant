@@ -1248,5 +1248,47 @@
     "trustScore": 90,
     "country": "US",
     "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "HistoryExtra",
+    "type": "rss",
+    "url": "https://www.historyextra.com/feed",
+    "trustScore": 84,
+    "country": "GB",
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "TheCollector",
+    "type": "rss",
+    "url": "https://www.thecollector.com/rss/",
+    "trustScore": 80,
+    "enabled": true
+  },
+  {
+    "section": "history",
+    "name": "Google News - Islamic History",
+    "type": "rss",
+    "url": "https://news.google.com/rss/search?q=islamic+history+OR+ottoman+OR+caliphate+OR+andalus+OR+archaeology&hl=en&gl=US&ceid=US:en",
+    "trustScore": 79,
+    "enabled": true
+  },
+  {
+    "section": "faith",
+    "name": "Islam21c",
+    "type": "rss",
+    "url": "https://www.islam21c.com/feed/",
+    "trustScore": 82,
+    "country": "GB",
+    "enabled": true
+  },
+  {
+    "section": "faith",
+    "name": "Google News - Faith",
+    "type": "rss",
+    "url": "https://news.google.com/rss/search?q=Islam+OR+Quran+OR+Hadith+OR+fiqh+OR+dua+OR+mosque+OR+Ramadan&hl=en&gl=US&ceid=US:en",
+    "trustScore": 78,
+    "enabled": true
   }
 ]
