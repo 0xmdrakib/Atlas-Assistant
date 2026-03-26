@@ -1,8 +1,4 @@
-import nextEnv from "@next/env";
 import { ingestOnce } from "@/lib/ingest";
-
-const { loadEnvConfig } = nextEnv;
-loadEnvConfig(process.cwd());
 
 const minutes = Number(process.env.INGEST_EVERY_MINUTES || "30");
 const ms = minutes * 60 * 1000;
