@@ -62,6 +62,13 @@ npm run dev
 
 Open `http://localhost:3000` in your browser.
 
+### 5. Build for production
+
+```bash
+npm run build
+npm run start
+```
+
 ### Useful scripts
 
 ```bash
