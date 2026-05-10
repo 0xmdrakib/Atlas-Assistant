@@ -35,7 +35,7 @@ export function Button({
     "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium transition focus-ring disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:bg-transparent";
   const styles =
     variant === "ghost"
-      ? "border border-soft bg-transparent hover-subtle"
+      ? "border border-soft bg-solid-muted hover-subtle-2"
       : variant === "danger"
       ? "bg-[hsl(var(--danger))] text-black hover:opacity-90"
       : "bg-[hsl(var(--accent))] text-black hover:opacity-90";
