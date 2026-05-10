@@ -66,6 +66,10 @@ export function subscriptionPrice() {
   };
 }
 
+export function cardPaymentEnabled(): boolean {
+  return Boolean(process.env.PADDLE_API_KEY && process.env.PADDLE_PRICE_ID && process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN);
+}
+
 export function paddlePriceId(): string {
   return requiredEnv("PADDLE_PRICE_ID");
 }
@@ -73,13 +77,18 @@ export function paddlePriceId(): string {
 export async function createNowpaymentsInvoice(args: {
   orderId: string;
   userEmail?: string | null;
+  amount?: string | null;
+  discountCode?: string | null;
+  discountPercentOff?: number | null;
 }) {
   const price = subscriptionPrice();
   return nowpaymentsPost("/invoice", {
-    price_amount: Number(price.amount),
+    price_amount: Number(args.amount || price.amount),
     price_currency: price.currency,
     order_id: args.orderId,
-    order_description: "Atlas Assistant monthly subscription",
+    order_description: args.discountCode
+      ? `Atlas Assistant monthly subscription (${args.discountPercentOff || 0}% discount: ${args.discountCode})`
+      : "Atlas Assistant monthly subscription",
     ipn_callback_url: `${appUrl()}/api/webhooks/nowpayments`,
     success_url: `${appUrl()}/?billing=success`,
     cancel_url: `${appUrl()}/?billing=cancelled`,
@@ -94,11 +103,25 @@ export async function createPaddleCheckoutTransaction(args: {
   paymentSessionId: string;
   userId: string;
   userEmail?: string | null;
+  discountCode?: string | null;
+  discountPercentOff?: number | null;
 }) {
+  const percentOff = Math.max(0, Math.min(99, Math.round(args.discountPercentOff || 0)));
+  const discount =
+    percentOff > 0
+      ? {
+          amount: String(percentOff),
+          description: `Atlas Assistant ${percentOff}% off${args.discountCode ? ` (${args.discountCode})` : ""}`,
+          type: "percentage",
+          recur: false,
+        }
+      : undefined;
+
   return paddlePost("/transactions", {
     items: [{ price_id: paddlePriceId(), quantity: 1 }],
     collection_mode: "automatic",
     enable_checkout: true,
+    discount,
     checkout: {
       url: `${appUrl()}/paddle-checkout`,
     },
@@ -108,6 +131,8 @@ export async function createPaddleCheckoutTransaction(args: {
       paymentSessionId: args.paymentSessionId,
       userId: args.userId,
       userEmail: args.userEmail || undefined,
+      discountCode: args.discountCode || undefined,
+      discountPercentOff: percentOff || undefined,
     },
   });
 }
