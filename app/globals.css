@@ -99,9 +99,11 @@ body::after {
 /* Semantic "glass" utilities that look right in BOTH themes */
 .bg-glass { background: hsl(var(--surface) / 0.60); }
 .bg-glass-strong { background: hsl(var(--surface2) / 0.78); }
+.bg-solid-surface { background: hsl(var(--surface)); }
+.bg-solid-muted { background: hsl(var(--surface2)); }
 .bg-subtle { background: hsl(var(--fg) / 0.04); }
 .bg-subtle-2 { background: hsl(var(--fg) / 0.06); }
-.bg-overlay { background: hsl(var(--bg) / 0.74); }
+.bg-overlay { background: hsl(var(--bg) / 0.84); backdrop-filter: blur(6px); }
 
 .ring-subtle { --tw-ring-color: hsl(var(--fg) / 0.06); }
 .hover-subtle:hover { background: hsl(var(--fg) / 0.04); }
