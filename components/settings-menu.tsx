@@ -174,7 +174,7 @@ export function SettingsMenu() {
   }, [langOpen, computeLangPlacement]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative z-50" ref={ref}>
       <UpgradeModal open={upgradeOpen} reason={upgradeReason} onClose={() => setUpgradeOpen(false)} />
       <Button variant="ghost" className="gap-2" onClick={() => setOpen((v) => !v)} aria-label={t(lang, "settings")}>
         <Menu size={16} />
@@ -182,7 +182,7 @@ export function SettingsMenu() {
       </Button>
 
       {open ? (
-        <Card className="absolute right-0 mt-2 w-[320px] border-[hsl(var(--border))] bg-solid-surface p-4 shadow-2xl">
+        <Card className="absolute right-0 z-50 mt-2 w-[320px] border-[hsl(var(--border))] bg-solid-surface p-4 shadow-2xl">
           <div className="space-y-4">
             {/* 1) Profile / Auth */}
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-soft bg-solid-muted p-3">
