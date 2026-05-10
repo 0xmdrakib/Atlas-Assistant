@@ -91,6 +91,67 @@ model AiUsage {
   @@index([day])
 }
 
+// --- Billing / subscription state ---
+// v1 uses NOWPayments as the subscription source of truth. MoonPay is only a
+// card-to-crypto bridge into a NOWPayments payment address.
+model PaymentSession {
+  id          String   @id @default(cuid())
+  userId      String
+  orderId     String   @unique
+  method      String   // "crypto" | "card"
+  status      String   @default("pending")
+
+  priceAmount   String
+  priceCurrency String
+  payAmount     String?
+  payCurrency   String?
+  payAddress    String?
+
+  nowpaymentsInvoiceId String?
+  nowpaymentsPaymentId String? @unique
+  nowpaymentsPurchaseId String?
+  invoiceUrl           String?
+  moonpayUrl           String?
+  moonpayTransactionId String?
+
+  rawProviderData Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([orderId])
+}
+
+model PaymentEvent {
+  id        String   @id @default(cuid())
+  provider  String
+  eventId   String
+  paymentId String?
+  orderId   String?
+  status    String?
+  raw       Json
+  createdAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([paymentId])
+  @@index([orderId])
+}
+
+model TranslationUnlock {
+  id        String   @id @default(cuid())
+  userId    String
+  periodKey String
+  lang      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, periodKey, lang])
+  @@index([userId, periodKey])
+}
+
 // --- Cached translations for non-English UI mode ---
 // Translation is login-gated (to prevent abuse) and is NOT counted in AI quota.
 model ItemTranslation {
@@ -123,6 +184,12 @@ model User {
   sessions      Session[]
   // Daily AI usage counters (quota)
   aiUsages      AiUsage[]
+  paymentSessions PaymentSession[]
+  translationUnlocks TranslationUnlock[]
+  subscriptionPlan String @default("free")
+  subscriptionStatus String @default("free")
+  subscriptionCurrentPeriodStart DateTime?
+  subscriptionCurrentPeriodEnd DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
