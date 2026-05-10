@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 
 import crypto from "crypto";
 import { activatePaidAccess, updateSubscriptionFromProvider } from "@/lib/billing";
+import { markDiscountRedemptionRedeemed } from "@/lib/discounts";
 import { prisma } from "@/lib/prisma";
 
 function parseSignatureHeader(header: string | null): { ts: string; h1: string[] } | null {
@@ -105,6 +106,7 @@ async function handleTransactionCompleted(body: any) {
   if (!userId) return;
 
   const period = billingPeriod(data);
+  if (session?.id) await markDiscountRedemptionRedeemed(session.id);
   await activatePaidAccess({
     userId,
     paymentSessionId: session?.id || null,
