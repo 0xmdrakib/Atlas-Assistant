@@ -111,6 +111,12 @@ export function Feed({ section }: { section: Section }) {
     setUpgradeOpen(true);
   }
 
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upgrade") === "pro") showUpgrade(t(lang, "upgradeBody"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function load() {
     const qs = new URLSearchParams();
     qs.set("section", section);
