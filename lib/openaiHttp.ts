@@ -6,8 +6,8 @@ function openaiResponsesUrl(): string {
 export const OPENAI_MODELS = {
   summary: "gpt-4o-mini",
   digest: "gpt-4o-mini",
-  translate: "gpt-4.1-mini",
-  feedPicker: "gpt-4.1-mini",
+  translate: "gpt-4.1-nano",
+  feedPicker: "gpt-4.1-nano",
 } as const;
 
 function requiredEnv(name: string): string {
