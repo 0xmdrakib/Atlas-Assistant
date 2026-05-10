@@ -48,6 +48,16 @@ function periodLabel(endIso?: string | null) {
   return `${days} days left, ends ${date}`;
 }
 
+function prettyStatus(status?: string) {
+  const value = String(status || "free").trim();
+  if (!value) return "Free";
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function UpgradeModal({
   open,
   reason,
@@ -107,6 +117,8 @@ export function UpgradeModal({
   const active = ownerActive || paidActive;
   const activePeriod = periodLabel(billingStatus?.currentPeriodEnd);
   const cardEnabled = Boolean(billingConfig?.cardPaymentEnabled);
+  const planLabel = ownerActive ? "Owner" : paidActive ? "Pro" : "Free";
+  const statusLabel = ownerActive ? "Owner access" : prettyStatus(billingStatus?.status);
   const displayPrice = appliedDiscount
     ? `${appliedDiscount.price.currency.toUpperCase()} ${appliedDiscount.price.finalAmount} / month`
     : priceLabel;
@@ -221,12 +233,28 @@ export function UpgradeModal({
 
         {error ? <div className="mt-3 rounded-xl border border-soft bg-solid-muted p-3 text-sm text-muted">{error}</div> : null}
 
-        {active ? (
+        {authed && billingStatus ? (
           <div className="mt-4 rounded-xl border border-soft bg-solid-muted p-3 text-sm">
-            {ownerActive ? (
-              <div className="text-muted">Unlimited AI summaries, AI digests, and translations.</div>
-            ) : (
-              <div className="grid gap-2">
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted">Current plan</span>
+                <span className="font-medium">{planLabel}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted">Status</span>
+                <span className="font-medium">{statusLabel}</span>
+              </div>
+              {activePeriod ? (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted">Current period</span>
+                  <span className="text-right font-medium">{activePeriod}</span>
+                </div>
+              ) : null}
+              {ownerActive ? (
+                <div className="pt-1 text-xs text-muted">Unlimited AI summaries, AI digests, and translations.</div>
+              ) : (
+                <>
+                  <div className="border-t border-soft pt-2" />
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted">{t(lang, "itemSummary")}</span>
                   <span className="font-medium">
@@ -240,10 +268,13 @@ export function UpgradeModal({
                   </span>
                 </div>
                 <div className="text-xs text-muted">Daily limits reset at UTC midnight.</div>
-              </div>
-            )}
+                </>
+              )}
+            </div>
           </div>
-        ) : (
+        ) : null}
+
+        {active ? null : (
           <div className="mt-5 grid gap-3">
             <div className="rounded-xl border border-soft bg-solid-muted p-3">
               <div className="flex items-center gap-2">
