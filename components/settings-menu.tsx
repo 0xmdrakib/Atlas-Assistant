@@ -18,6 +18,27 @@ function normalize(s: string) {
   return s.toLowerCase().trim();
 }
 
+type BillingStatus = {
+  plan?: "free" | "paid";
+  status?: string;
+  currentPeriodEnd?: string | null;
+};
+
+function subscriptionBadge(status: BillingStatus | null, fallback: string) {
+  if (status?.status === "owner") return "Owner access";
+  if (status?.plan === "paid") {
+    const end = status.currentPeriodEnd ? new Date(status.currentPeriodEnd) : null;
+    if (end && !Number.isNaN(end.getTime())) {
+      const days = Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000));
+      if (days <= 0) return "Ends today";
+      if (days === 1) return "1 day left";
+      return `${days} days left`;
+    }
+    return "Pro active";
+  }
+  return fallback;
+}
+
 export function SettingsMenu() {
   const { lang, setLang, t } = useLanguage();
   const { theme, setTheme } = useTheme();
@@ -31,6 +52,7 @@ export function SettingsMenu() {
   const [upgradeOpen, setUpgradeOpen] = React.useState(false);
   const [upgradeReason, setUpgradeReason] = React.useState("");
   const [billingPlan, setBillingPlan] = React.useState<"free" | "paid" | null>(null);
+  const [billingStatus, setBillingStatus] = React.useState<BillingStatus | null>(null);
   const [subscriptionPriceLabel, setSubscriptionPriceLabel] = React.useState("$2.99/mo");
   const ref = React.useRef<HTMLDivElement | null>(null);
   const langBtnRef = React.useRef<HTMLButtonElement | null>(null);
@@ -122,7 +144,10 @@ export function SettingsMenu() {
         const statusData = await statusRes.json().catch(() => null);
         const configData = await configRes.json().catch(() => null);
         if (cancelled) return;
-        if (statusData?.ok) setBillingPlan(statusData?.plan === "paid" ? "paid" : "free");
+        if (statusData?.ok) {
+          setBillingPlan(statusData?.plan === "paid" ? "paid" : "free");
+          setBillingStatus(statusData);
+        }
         if (configData?.ok && configData?.price?.amount) {
           const amount = String(configData.price.amount);
           const currency = String(configData.price.currency || "usd").toUpperCase();
@@ -251,7 +276,7 @@ export function SettingsMenu() {
                   <span>{t(lang, "subscription")}</span>
                 </span>
                 <span className="text-xs text-muted">
-                  {billingPlan === "paid" ? t(lang, "proActive") : subscriptionPriceLabel}
+                  {subscriptionBadge(billingStatus, billingPlan === "paid" ? t(lang, "proActive") : subscriptionPriceLabel)}
                 </span>
               </button>
             </div>
