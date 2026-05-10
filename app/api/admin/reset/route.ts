@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { requireOwnerSession } from "@/lib/owner";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -11,23 +12,17 @@ export const maxDuration = 60;
  * while keeping Sources + auth tables.
  *
  * Usage:
- *   POST /api/admin/reset?token=ADMIN_TOKEN
+ *   POST /api/admin/reset
  * Optional:
  *   mode=all  -> also deletes Sources (you must re-run source sync afterwards)
  */
 export async function POST(req: Request) {
-  const url = new URL(req.url);
-  const token =
-    url.searchParams.get("token") ||
-    req.headers.get("x-admin-token") ||
-    req.headers.get("x-admin-key") ||
-    "";
-
-  const adminToken = process.env.ADMIN_TOKEN || "";
-  if (!token || !adminToken || token !== adminToken) {
+  const session = await requireOwnerSession();
+  if (!session) {
     return Response.json({ ok: false, error: "Not authorized" }, { status: 401 });
   }
 
+  const url = new URL(req.url);
   const mode = String(url.searchParams.get("mode") || "content").toLowerCase();
   const startedAt = new Date();
 
