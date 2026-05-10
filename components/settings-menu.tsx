@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Menu, Globe, Search, Check, ChevronDown, LogOut, CreditCard, Shield } from "lucide-react";
 import { Card, Button, Pill } from "@/components/ui";
 import { LANGUAGES, languageByCode } from "@/lib/i18n";
 import { useLanguage } from "@/components/language-provider";
 import { useTheme } from "next-themes";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { UpgradeModal } from "@/components/upgrade-modal";
 
 const UI_CACHE_VER = "1";
 function uiCacheKey(lang: string) {
@@ -41,6 +41,9 @@ function subscriptionBadge(status: BillingStatus | null, fallback: string) {
 }
 
 export function SettingsMenu() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { lang, setLang, t } = useLanguage();
   const { theme, setTheme } = useTheme();
   const { data: session, status } = useSession();
@@ -50,8 +53,6 @@ export function SettingsMenu() {
   const [open, setOpen] = React.useState(false);
   const [langOpen, setLangOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [upgradeOpen, setUpgradeOpen] = React.useState(false);
-  const [upgradeReason, setUpgradeReason] = React.useState("");
   const [billingPlan, setBillingPlan] = React.useState<"free" | "paid" | null>(null);
   const [billingStatus, setBillingStatus] = React.useState<BillingStatus | null>(null);
   const [subscriptionPriceLabel, setSubscriptionPriceLabel] = React.useState("$2.99/mo");
@@ -62,6 +63,26 @@ export function SettingsMenu() {
   const [langMaxH, setLangMaxH] = React.useState(420);
 
   const current = languageByCode(lang) ?? { code: lang, label: lang, nativeLabel: lang, speechLang: lang };
+
+  const openUpgradePage = React.useCallback(
+    (reason?: string) => {
+      setOpen(false);
+      setLangOpen(false);
+
+      if (reason) {
+        try {
+          sessionStorage.setItem("atlas:upgradeReason", reason);
+        } catch {
+          // ignore
+        }
+      }
+
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("upgrade", "pro");
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
 
   const prefetchUiTranslations = React.useCallback(async (target: string) => {
     // en & bn are bundled; others are fetched once and cached in localStorage.
@@ -88,8 +109,7 @@ export function SettingsMenu() {
       if (!target || target === "en") return true;
 
       if (!authed) {
-        setUpgradeReason(t(lang, "subscriptionRequired"));
-        setUpgradeOpen(true);
+        openUpgradePage(t(lang, "subscriptionRequired"));
         return false;
       }
 
@@ -101,11 +121,10 @@ export function SettingsMenu() {
       const data = await r.json().catch(() => null);
       if (r.ok && data?.ok) return true;
 
-      setUpgradeReason(r.status === 429 ? t(lang, "translationLimitReached") : t(lang, "subscriptionRequired"));
-      setUpgradeOpen(true);
+      openUpgradePage(r.status === 429 ? t(lang, "translationLimitReached") : t(lang, "subscriptionRequired"));
       return false;
     },
-    [authed, lang, t]
+    [authed, lang, openUpgradePage, t]
   );
 
   const filtered = React.useMemo(() => {
@@ -201,7 +220,6 @@ export function SettingsMenu() {
 
   return (
     <div className="relative z-50" ref={ref}>
-      <UpgradeModal open={upgradeOpen} reason={upgradeReason} onClose={() => setUpgradeOpen(false)} />
       <Button variant="ghost" className="gap-2" onClick={() => setOpen((v) => !v)} aria-label={t(lang, "settings")}>
         <Menu size={16} />
         <span className="hidden sm:inline">{t(lang, "settings")}</span>
@@ -260,15 +278,7 @@ export function SettingsMenu() {
             <div className="pt-2 border-t border-soft">
               <button
                 onClick={() => {
-                  if (!authed) {
-                    setOpen(false);
-                    signIn("google");
-                    return;
-                  }
-                  setUpgradeReason(t(lang, "upgradeBody"));
-                  setOpen(false);
-                  setLangOpen(false);
-                  setUpgradeOpen(true);
+                  openUpgradePage(t(lang, "upgradeBody"));
                 }}
                 className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-solid-muted px-3 py-2 text-sm transition focus-ring hover-subtle-2"
               >
