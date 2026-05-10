@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ContentItem, Section } from "@/lib/types";
 import { Card, Pill, Button, A, Segmented } from "@/components/ui";
 import { timeAgo } from "@/lib/utils";
@@ -75,6 +76,9 @@ function stripKeyPointsFromSummary(summary: string): string {
 }
 
 export function Feed({ section }: { section: Section }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { status } = useSession();
   const authed = status === "authenticated";
   const { lang, t, speechLang } = useLanguage();
@@ -106,16 +110,49 @@ export function Feed({ section }: { section: Section }) {
     return false;
   }
 
-  function showUpgrade(reason?: string) {
-    setUpgradeReason(reason || t(lang, "subscriptionRequired"));
-    setUpgradeOpen(true);
+  const showUpgrade = React.useCallback(
+    (reason?: string) => {
+      setUpgradeReason(reason || t(lang, "subscriptionRequired"));
+      setUpgradeOpen(true);
+
+      const params = new URLSearchParams(searchParams.toString());
+      if (params.get("upgrade") !== "pro") {
+        params.set("upgrade", "pro");
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      }
+    },
+    [lang, pathname, router, searchParams, t]
+  );
+
+  function closeUpgrade() {
+    setUpgradeOpen(false);
+    setUpgradeReason("");
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (params.get("upgrade") === "pro") {
+      params.delete("upgrade");
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
   }
 
   React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("upgrade") === "pro") showUpgrade(t(lang, "upgradeBody"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (searchParams.get("upgrade") !== "pro") {
+      setUpgradeOpen(false);
+      return;
+    }
+
+    let pendingReason = "";
+    try {
+      pendingReason = sessionStorage.getItem("atlas:upgradeReason") || "";
+      if (pendingReason) sessionStorage.removeItem("atlas:upgradeReason");
+    } catch {
+      pendingReason = "";
+    }
+
+    setUpgradeReason((current) => current || pendingReason || t(lang, "upgradeBody"));
+    setUpgradeOpen(true);
+  }, [lang, searchParams, t]);
 
   async function load() {
     const qs = new URLSearchParams();
@@ -287,7 +324,7 @@ setLast(new Date().toISOString());
         </div>
       ) : null}
 
-      <UpgradeModal open={upgradeOpen} reason={upgradeReason} onClose={() => setUpgradeOpen(false)} />
+      <UpgradeModal open={upgradeOpen} reason={upgradeReason} onClose={closeUpgrade} />
 
       <Card className="p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
