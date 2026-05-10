@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isOwnerEmail } from "@/lib/owner";
 
 export type PlanName = "free" | "paid";
 export type AiCountKind = "digest" | "summary";
@@ -7,24 +8,6 @@ const FREE_LIMITS = { summary: 5, digest: 3 } as const;
 const PAID_LIMITS = { summary: 20, digest: 10 } as const;
 const OWNER_LIMITS = { summary: 999999, digest: 999999 } as const;
 const PAID_TRANSLATION_LIMIT = 2;
-
-function normalizeEmail(email?: string | null): string {
-  return String(email || "").trim().toLowerCase();
-}
-
-function ownerEmailSet(): Set<string> {
-  return new Set(
-    String(process.env.OWNER_EMAILS || "")
-      .split(",")
-      .map(normalizeEmail)
-      .filter(Boolean)
-  );
-}
-
-function isOwnerEmail(email?: string | null): boolean {
-  const owners = ownerEmailSet();
-  return owners.size > 0 && owners.has(normalizeEmail(email));
-}
 
 export function todayUtcKey(d = new Date()): string {
   const y = d.getUTCFullYear();
