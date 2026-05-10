@@ -1,5 +1,5 @@
 import { languageByCode } from "@/lib/i18n";
-import { generateText as geminiGenerateText } from "@/lib/geminiHttp";
+import { OPENAI_MODELS, isOpenAiEnabled, openaiGenerateText } from "@/lib/openaiHttp";
 
 export type TranslatableItem = {
   id: string;
@@ -11,13 +11,11 @@ export type TranslatedItem = {
   id: string;
   title: string;
   summary: string;
-  // Whether the translation came from the model (vs fallback).
   ok: boolean;
 };
 
 export function isTranslateEnabled(): boolean {
-  // Support both the dedicated key and the common GEMINI_API_KEY name.
-  return Boolean(process.env.AI_TRANSLATE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
+  return isOpenAiEnabled();
 }
 
 function languageForPrompt(lang: string): { label: string; nativeLabel?: string } {
@@ -47,76 +45,66 @@ function chunkByBudget(items: TranslatableItem[], maxItems: number, maxChars: nu
   return chunks;
 }
 
-async function geminiTranslateChunk(items: TranslatableItem[], targetLang: string): Promise<TranslatedItem[]> {
-  const apiKey = process.env.AI_TRANSLATE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!apiKey) throw new Error("Missing required env var: AI_TRANSLATE_API_KEY (or GEMINI_API_KEY / GOOGLE_API_KEY)");
-
-  const model = process.env.AI_TRANSLATE_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
-
+async function openaiTranslateChunk(items: TranslatableItem[], targetLang: string): Promise<TranslatedItem[]> {
   const target = languageForPrompt(targetLang);
   const targetLabel = target.nativeLabel ? `${target.label} (${target.nativeLabel})` : target.label;
 
-  const payloadItems = items
-    .map((it) => ({
-      id: it.id,
-      title: it.title,
-      summary: it.summary ?? "",
-    }))
-    .filter(Boolean);
+  const payloadItems = items.map((it) => ({
+    id: it.id,
+    title: it.title,
+    summary: it.summary ?? "",
+  }));
 
   const prompt = [
     `Translate the following items into ${targetLabel}.`,
-    `- Preserve URLs, @handles, #hashtags, numbers, punctuation, and Markdown formatting.`,
-    `- Keep proper nouns (people/org/product names) as-is unless there's a standard translation.`,
-    `- Return ONLY valid JSON matching the provided schema.`,
+    `Preserve URLs, @handles, #hashtags, numbers, punctuation, and Markdown formatting.`,
+    `Keep proper nouns as-is unless there is a standard translation.`,
+    `Return only JSON matching the schema.`,
     ``,
-    JSON.stringify(payloadItems),
+    JSON.stringify({ items: payloadItems }),
   ].join("\n");
 
   const schema = {
-    type: "array",
-    items: {
-      type: "object",
-      properties: {
-        id: { type: "string" },
-        title: { type: "string" },
-        summary: { type: "string" },
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            summary: { type: "string" },
+          },
+          required: ["id", "title", "summary"],
+        },
       },
-      required: ["id", "title", "summary"],
     },
+    required: ["items"],
   };
 
-  const text = await geminiGenerateText({
-    apiKey,
-    model,
+  const text = await openaiGenerateText({
+    model: OPENAI_MODELS.translate,
     prompt,
-    systemInstruction: "Return only JSON.",
+    instructions: "Return only JSON.",
     temperature: 0.2,
     maxOutputTokens: 4096,
-    responseMimeType: "application/json",
-    responseSchema: schema,
-    timeoutMs: 25_000,
+    jsonSchema: { name: "atlas_translated_items", schema },
+    timeoutMs: 30_000,
     retries: 1,
   });
-  if (!text) throw new Error("Gemini translate returned no text");
 
-  let parsed: any;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    // Some responses may already be JSON-ish but wrapped in whitespace; try a strict trim.
-    parsed = JSON.parse(String(text).trim());
-  }
+  const parsed = JSON.parse(String(text).trim());
+  const arr = Array.isArray(parsed?.items) ? parsed.items : [];
 
-  if (!Array.isArray(parsed)) throw new Error("Gemini translate returned non-array JSON");
-
-  const out: Omit<TranslatedItem, "ok">[] = parsed.map((x: any) => ({
+  const out: Omit<TranslatedItem, "ok">[] = arr.map((x: any) => ({
     id: String(x.id),
     title: String(x.title ?? ""),
     summary: String(x.summary ?? ""),
   }));
 
-  // Return in the same order as input.
   const byId = new Map(out.map((o) => [o.id, o]));
   return items.map((it) => {
     const got = byId.get(it.id);
@@ -127,19 +115,16 @@ async function geminiTranslateChunk(items: TranslatableItem[], targetLang: strin
 
 export async function translateItemBatch(items: TranslatableItem[], targetLang: string): Promise<TranslatedItem[]> {
   if (!isTranslateEnabled()) return items.map((it) => ({ ...it, summary: it.summary ?? "", ok: false }));
-
-  // If the target is English, no work needed.
   if (targetLang === "en") return items.map((it) => ({ ...it, summary: it.summary ?? "", ok: false }));
 
   const maxItems = Number(process.env.AI_TRANSLATE_BATCH_SIZE || 16);
   const maxChars = Number(process.env.AI_TRANSLATE_MAX_CHARS || 12000);
-
   const chunks = chunkByBudget(items, maxItems, maxChars);
 
   const translated: TranslatedItem[] = [];
   for (const chunk of chunks) {
     try {
-      const out = await geminiTranslateChunk(chunk, targetLang);
+      const out = await openaiTranslateChunk(chunk, targetLang);
       translated.push(...out);
     } catch (err) {
       console.error("translateItemBatch chunk failed", err);
