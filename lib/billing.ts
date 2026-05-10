@@ -5,7 +5,26 @@ export type AiCountKind = "digest" | "summary";
 
 const FREE_LIMITS = { summary: 5, digest: 3 } as const;
 const PAID_LIMITS = { summary: 20, digest: 10 } as const;
+const OWNER_LIMITS = { summary: 999999, digest: 999999 } as const;
 const PAID_TRANSLATION_LIMIT = 2;
+
+function normalizeEmail(email?: string | null): string {
+  return String(email || "").trim().toLowerCase();
+}
+
+function ownerEmailSet(): Set<string> {
+  return new Set(
+    String(process.env.OWNER_EMAILS || "")
+      .split(",")
+      .map(normalizeEmail)
+      .filter(Boolean)
+  );
+}
+
+function isOwnerEmail(email?: string | null): boolean {
+  const owners = ownerEmailSet();
+  return owners.size > 0 && owners.has(normalizeEmail(email));
+}
 
 export function todayUtcKey(d = new Date()): string {
   const y = d.getUTCFullYear();
@@ -37,16 +56,28 @@ export async function getPlanForUser(userId: string, now = new Date()): Promise<
   status: string;
   currentPeriodStart: Date | null;
   currentPeriodEnd: Date | null;
+  isOwner: boolean;
 }> {
   const u = await prisma.user.findUnique({
     where: { id: userId },
     select: {
+      email: true,
       subscriptionPlan: true,
       subscriptionStatus: true,
       subscriptionCurrentPeriodStart: true,
       subscriptionCurrentPeriodEnd: true,
     },
   });
+
+  if (isOwnerEmail(u?.email)) {
+    return {
+      plan: "paid",
+      status: "owner",
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      isOwner: true,
+    };
+  }
 
   const active =
     u?.subscriptionPlan === "paid" &&
@@ -59,6 +90,7 @@ export async function getPlanForUser(userId: string, now = new Date()): Promise<
     status: u?.subscriptionStatus || "free",
     currentPeriodStart: active ? u?.subscriptionCurrentPeriodStart || null : null,
     currentPeriodEnd: active ? u?.subscriptionCurrentPeriodEnd || null : null,
+    isOwner: false,
   };
 }
 
@@ -74,9 +106,9 @@ export async function getBillingStatus(userId: string) {
     .findUnique({ where: { userId_day: { userId, day } } })
     .catch(() => null);
 
-  const limits = limitsForPlan(planInfo.plan);
+  const limits = planInfo.isOwner ? OWNER_LIMITS : limitsForPlan(planInfo.plan);
   const translationRows =
-    planInfo.plan === "paid" && planInfo.currentPeriodStart && planInfo.currentPeriodEnd
+    !planInfo.isOwner && planInfo.plan === "paid" && planInfo.currentPeriodStart && planInfo.currentPeriodEnd
       ? await prisma.translationUnlock.findMany({
           where: {
             userId,
@@ -90,6 +122,7 @@ export async function getBillingStatus(userId: string) {
   return {
     plan: planInfo.plan,
     status: planInfo.status,
+    isOwner: planInfo.isOwner,
     currentPeriodStart: planInfo.currentPeriodStart?.toISOString() || null,
     currentPeriodEnd: planInfo.currentPeriodEnd?.toISOString() || null,
     resetAt: nextUtcResetIso(now),
@@ -123,6 +156,16 @@ export async function enforceAndIncrementAiUsage(args: {
   const planInfo = await getPlanForUser(args.userId, now);
   const limits = limitsForPlan(planInfo.plan);
   const limit = limits[args.kind];
+
+  if (planInfo.isOwner) {
+    return {
+      ok: true,
+      remaining: OWNER_LIMITS[args.kind],
+      limit: OWNER_LIMITS[args.kind],
+      plan: "paid",
+      resetAt,
+    };
+  }
 
   return prisma.$transaction(async (tx) => {
     const row = await tx.aiUsage.upsert({
@@ -167,6 +210,10 @@ export async function ensureTranslationEntitlement(args: {
   }
 
   const planInfo = await getPlanForUser(args.userId);
+  if (planInfo.isOwner) {
+    return { ok: true, plan: "paid", languages: [], remaining: OWNER_LIMITS.summary };
+  }
+
   if (planInfo.plan !== "paid" || !planInfo.currentPeriodStart || !planInfo.currentPeriodEnd) {
     return {
       ok: false,
