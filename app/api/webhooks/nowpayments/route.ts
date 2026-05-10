@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 
 import crypto from "crypto";
 import { activatePaidAccess } from "@/lib/billing";
+import { markDiscountRedemptionRedeemed } from "@/lib/discounts";
 import { prisma } from "@/lib/prisma";
 
 function sortObject(value: any): any {
@@ -110,6 +111,7 @@ export async function POST(req: Request) {
 
   const alreadyActivated = session.status === "finished" || session.status === "confirmed";
   if (isSuccessStatus(status) && !alreadyActivated) {
+    await markDiscountRedemptionRedeemed(session.id);
     await activatePaidAccess({
       userId: session.userId,
       paymentSessionId: session.id,
