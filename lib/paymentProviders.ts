@@ -1,8 +1,6 @@
-import crypto from "crypto";
-
 const NOWPAYMENTS_BASE = "https://api.nowpayments.io/v1";
-const MOONPAY_BASE = "https://buy.moonpay.com";
-const FASTEST_CARD_CRYPTO_CODE = "usdttrc20";
+const PADDLE_LIVE_BASE = "https://api.paddle.com";
+const PADDLE_SANDBOX_BASE = "https://sandbox-api.paddle.com";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -37,6 +35,30 @@ async function nowpaymentsPost(path: string, body: any): Promise<any> {
   return await res.json();
 }
 
+function paddleApiBase(apiKey: string): string {
+  return apiKey.includes("_sdbx_") ? PADDLE_SANDBOX_BASE : PADDLE_LIVE_BASE;
+}
+
+async function paddlePost(path: string, body: any): Promise<any> {
+  const apiKey = requiredEnv("PADDLE_API_KEY");
+  const res = await fetch(`${paddleApiBase(apiKey)}${path}`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "Paddle-Version": "1",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Paddle request failed: ${res.status} ${txt}`);
+  }
+
+  return await res.json();
+}
+
 export function subscriptionPrice() {
   return {
     amount: process.env.NOWPAYMENTS_PRICE_AMOUNT || "2.99",
@@ -44,8 +66,8 @@ export function subscriptionPrice() {
   };
 }
 
-export function cardCryptoCode(): string {
-  return (process.env.MOONPAY_CARD_CRYPTO_CODE || FASTEST_CARD_CRYPTO_CODE).trim().toLowerCase();
+export function paddlePriceId(): string {
+  return requiredEnv("PADDLE_PRICE_ID");
 }
 
 export async function createNowpaymentsInvoice(args: {
@@ -67,50 +89,25 @@ export async function createNowpaymentsInvoice(args: {
   });
 }
 
-export async function createNowpaymentsDirectPayment(args: {
+export async function createPaddleCheckoutTransaction(args: {
   orderId: string;
+  paymentSessionId: string;
+  userId: string;
   userEmail?: string | null;
 }) {
-  const price = subscriptionPrice();
-  const payCurrency = cardCryptoCode();
-
-  return nowpaymentsPost("/payment", {
-    price_amount: Number(price.amount),
-    price_currency: price.currency,
-    pay_currency: payCurrency,
-    order_id: args.orderId,
-    order_description: "Atlas Assistant monthly subscription",
-    ipn_callback_url: `${appUrl()}/api/webhooks/nowpayments`,
-    success_url: `${appUrl()}/?billing=success`,
-    cancel_url: `${appUrl()}/?billing=cancelled`,
-    customer_email: args.userEmail || undefined,
-    is_fixed_rate: true,
-    is_fee_paid_by_user: true,
+  return paddlePost("/transactions", {
+    items: [{ price_id: paddlePriceId(), quantity: 1 }],
+    collection_mode: "automatic",
+    enable_checkout: true,
+    checkout: {
+      url: `${appUrl()}/paddle-checkout`,
+    },
+    custom_data: {
+      source: "atlas-assistant",
+      orderId: args.orderId,
+      paymentSessionId: args.paymentSessionId,
+      userId: args.userId,
+      userEmail: args.userEmail || undefined,
+    },
   });
-}
-
-export function buildSignedMoonpayUrl(args: {
-  walletAddress: string;
-  quoteCurrencyAmount: string;
-  orderId: string;
-  userEmail?: string | null;
-  currencyCode?: string | null;
-}) {
-  const publicKey = requiredEnv("MOONPAY_PUBLIC_KEY");
-  const secretKey = requiredEnv("MOONPAY_SECRET_KEY");
-  const currencyCode = String(args.currencyCode || cardCryptoCode()).trim().toLowerCase();
-
-  const url = new URL(MOONPAY_BASE);
-  url.searchParams.set("apiKey", publicKey);
-  url.searchParams.set("currencyCode", currencyCode);
-  url.searchParams.set("walletAddress", args.walletAddress);
-  url.searchParams.set("quoteCurrencyAmount", args.quoteCurrencyAmount);
-  url.searchParams.set("baseCurrencyCode", (process.env.NOWPAYMENTS_PRICE_CURRENCY || "usd").toLowerCase());
-  url.searchParams.set("redirectURL", `${appUrl()}/?billing=card-pending&orderId=${encodeURIComponent(args.orderId)}`);
-  url.searchParams.set("externalTransactionId", args.orderId);
-  if (args.userEmail) url.searchParams.set("email", args.userEmail);
-
-  const signature = crypto.createHmac("sha256", secretKey).update(url.search).digest("base64");
-  url.searchParams.set("signature", signature);
-  return url.toString();
 }
