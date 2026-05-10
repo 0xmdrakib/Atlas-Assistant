@@ -8,7 +8,7 @@ export type Language = {
   rtl?: boolean;
 };
 
-// Full language catalog (UI will show a filtered subset that Google Translation LLM explicitly supports).
+// Full language catalog (UI shows the curated subset we offer for AI translation).
 const ALL_LANGUAGES: Language[] = [
   { code: "ab", label: "Abkhazian", nativeLabel: "Аҧсуа", speechLang: "ab" },
   { code: "aa", label: "Afar", nativeLabel: "Afar", speechLang: "aa" },
@@ -197,10 +197,8 @@ const ALL_LANGUAGES: Language[] = [
   { code: "zu", label: "Zulu", nativeLabel: "isiZulu", speechLang: "zu" },
 ] as const;
 
-// Google Cloud Translation "Translation LLM supported languages" codes.
-// Source of truth: https://docs.cloud.google.com/translate/docs/languages
-// We keep BOTH official + experimental support codes.
-const GOOGLE_TRANSLATION_LLM_CODES = new Set<string>([
+// Curated language codes exposed in the language picker.
+const TRANSLATION_LANGUAGE_CODES = new Set<string>([
   "af",
   "sq",
   "am",
@@ -332,12 +330,10 @@ const GOOGLE_TRANSLATION_LLM_CODES = new Set<string>([
 
 // What the app actually offers in the language picker.
 // Note: our picker uses simple ISO codes (e.g. "es", "pt", "zh").
-// We keep a language if either:
-//  - its exact code is supported, OR
-//  - Google supports a regional/script variant of that code (e.g., "pt" via "pt-BR"/"pt-PT").
+// We keep a language if either its exact code or a regional/script variant is enabled.
 export const LANGUAGES: Language[] = ALL_LANGUAGES.filter((l) => {
-  if (GOOGLE_TRANSLATION_LLM_CODES.has(l.code)) return true;
-  for (const c of GOOGLE_TRANSLATION_LLM_CODES) {
+  if (TRANSLATION_LANGUAGE_CODES.has(l.code)) return true;
+  for (const c of TRANSLATION_LANGUAGE_CODES) {
     if (c.startsWith(l.code + "-")) return true;
   }
   return false;
@@ -388,7 +384,16 @@ const DICT: Dict = {
     dark: "Dark",
     light: "Light",
     translateNeedsLogin: "Sign in to translate the feed.",
-    translateNeedsKey: "Translation is unavailable (Gemini API key not configured).",
+    translateNeedsKey: "Translation is unavailable (OpenAI API key not configured).",
+    upgradeTitle: "Unlock more with Pro",
+    upgradeBody: "Upgrade to continue using AI summaries and translations.",
+    payCard: "Pay with card",
+    payCrypto: "Pay with crypto",
+    starting: "Starting...",
+    translationLimitReached: "Your plan includes 2 non-English languages per subscription month.",
+    subscriptionRequired: "Buy a subscription to unlock this feature.",
+    subscription: "Subscription",
+    proActive: "Pro active",
 
     themes: "Themes",
     highlights: "Highlights",
@@ -442,7 +447,16 @@ const DICT: Dict = {
     dark: "ডার্ক",
     light: "লাইট",
     translateNeedsLogin: "ফিড ট্রান্সলেট করতে লগইন করুন।",
-    translateNeedsKey: "অনুবাদ পাওয়া যাচ্ছে না (Gemini API key সেট করা নেই)।",
+    translateNeedsKey: "অনুবাদ পাওয়া যাচ্ছে না (OpenAI API key সেট করা নেই)।",
+    upgradeTitle: "Unlock more with Pro",
+    upgradeBody: "Upgrade to continue using AI summaries and translations.",
+    payCard: "Pay with card",
+    payCrypto: "Pay with crypto",
+    starting: "Starting...",
+    translationLimitReached: "Your plan includes 2 non-English languages per subscription month.",
+    subscriptionRequired: "Buy a subscription to unlock this feature.",
+    subscription: "Subscription",
+    proActive: "Pro active",
 
     themes: "থিম",
     highlights: "হাইলাইটস",
