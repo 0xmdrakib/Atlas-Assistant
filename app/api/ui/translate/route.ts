@@ -1,9 +1,13 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { ensureTranslationEntitlement } from "@/lib/billing";
 import { UI_EN, languageByCode } from "@/lib/i18n";
+import { OPENAI_MODELS, openaiGenerateText } from "@/lib/openaiHttp";
+import { resolveUserIdFromSession } from "@/lib/sessionUser";
 import { isTranslateEnabled } from "@/lib/translateProvider";
-import { generateText as geminiGenerateText } from "@/lib/geminiHttp";
 
 function languageForPrompt(lang: string): { label: string; nativeLabel?: string } {
   const L = languageByCode(lang);
@@ -11,53 +15,54 @@ function languageForPrompt(lang: string): { label: string; nativeLabel?: string 
   return { label: L.label, nativeLabel: L.nativeLabel };
 }
 
-async function geminiTranslateUiDict(targetLang: string): Promise<Record<string, string>> {
-  const apiKey = process.env.AI_TRANSLATE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!apiKey) throw new Error("Missing required env var: AI_TRANSLATE_API_KEY (or GEMINI_API_KEY / GOOGLE_API_KEY)");
-
-  const model = process.env.AI_TRANSLATE_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
-
+async function openaiTranslateUiDict(targetLang: string): Promise<Record<string, string>> {
   const target = languageForPrompt(targetLang);
   const targetLabel = target.nativeLabel ? `${target.label} (${target.nativeLabel})` : target.label;
 
   const prompt = [
     `Translate the following UI strings into ${targetLabel}.`,
-    `- Keep keys EXACTLY the same. Translate ONLY the values.`,
-    `- Preserve punctuation, emoji, and formatting (including ellipses “…”) as natural in the target language.`,
-    `- Keep product names / proper nouns (e.g., "Atlas") as-is.`,
-    `- Return ONLY valid JSON matching the provided schema.`,
+    `Keep keys exactly the same. Translate only values.`,
+    `Preserve punctuation and formatting naturally in the target language.`,
+    `Keep product names and proper nouns, such as "Atlas", as-is.`,
     ``,
-    JSON.stringify(UI_EN),
+    JSON.stringify({ strings: UI_EN }),
   ].join("\n");
 
+  const uiKeys = Object.keys(UI_EN);
   const schema = {
     type: "object",
-    additionalProperties: { type: "string" },
+    additionalProperties: false,
+    properties: {
+      strings: {
+        type: "object",
+        additionalProperties: false,
+        properties: Object.fromEntries(uiKeys.map((k) => [k, { type: "string" }])),
+        required: uiKeys,
+      },
+    },
+    required: ["strings"],
   };
 
-  const text = await geminiGenerateText({
-    apiKey,
-    model,
+  const text = await openaiGenerateText({
+    model: OPENAI_MODELS.translate,
     prompt,
-    systemInstruction: "Return only JSON.",
+    instructions: "Return only JSON.",
     temperature: 0.2,
     maxOutputTokens: 4096,
-    responseMimeType: "application/json",
-    responseSchema: schema,
+    jsonSchema: { name: "atlas_ui_translation", schema },
     timeoutMs: 25_000,
     retries: 1,
   });
-  if (!text) throw new Error("Gemini UI translate returned no text");
 
   const parsed = JSON.parse(String(text).trim());
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Gemini UI translate returned non-object JSON");
+  const dict = parsed?.strings;
+  if (!dict || typeof dict !== "object" || Array.isArray(dict)) {
+    throw new Error("UI translate returned non-object JSON");
   }
 
-  // Only keep known keys (defense-in-depth).
   const out: Record<string, string> = {};
   for (const k of Object.keys(UI_EN)) {
-    const v = (parsed as any)[k];
+    const v = (dict as any)[k];
     if (typeof v === "string" && v.trim().length > 0) out[k] = v;
   }
   return out;
@@ -68,12 +73,25 @@ export async function POST(req: Request) {
   const lang = String(body?.lang || "").trim().toLowerCase();
   if (!lang) return Response.json({ ok: false, error: "Missing lang" }, { status: 400 });
 
-  // Bundled languages (or no key) do not need dynamic translation.
   if (lang === "en" || lang === "bn") return Response.json({ ok: true, lang, strings: {} });
   if (!isTranslateEnabled()) return Response.json({ ok: false, error: "Translation disabled" }, { status: 403 });
 
+  const session = await getServerSession(authOptions);
+  if (!session) return Response.json({ ok: false, error: "Sign in required" }, { status: 401 });
+  const userId = await resolveUserIdFromSession(session);
+  if (!userId) return Response.json({ ok: false, error: "User id missing" }, { status: 401 });
+
+  const entitlement = await ensureTranslationEntitlement({ userId, lang });
+  if (!entitlement.ok) {
+    const { ok, ...blocked } = entitlement;
+    return Response.json(
+      { ok: false, ...blocked },
+      { status: entitlement.upgradeRequired ? 402 : 429 }
+    );
+  }
+
   try {
-    const strings = await geminiTranslateUiDict(lang);
+    const strings = await openaiTranslateUiDict(lang);
     return Response.json({ ok: true, lang, strings }, { headers: { "Cache-Control": "no-store" } });
   } catch (err: any) {
     console.error("ui translate failed", err);
