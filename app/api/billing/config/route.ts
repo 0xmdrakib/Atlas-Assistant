@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { subscriptionPrice } from "@/lib/paymentProviders";
+import { cardPaymentEnabled, subscriptionPrice } from "@/lib/paymentProviders";
 
 export async function GET() {
   const price = subscriptionPrice();
@@ -10,6 +10,7 @@ export async function GET() {
       ok: true,
       price,
       cardProvider: "paddle",
+      cardPaymentEnabled: cardPaymentEnabled(),
     },
     { headers: { "Cache-Control": "no-store" } }
   );
