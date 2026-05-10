@@ -8,6 +8,7 @@ import { Sparkles } from "lucide-react";
 import { signIn, useSession } from "next-auth/react";
 import { useLanguage } from "@/components/language-provider";
 import { SpeakButton } from "@/components/speak-button";
+import { UpgradeModal } from "@/components/upgrade-modal";
 
 type Days = 1 | 7;
 type DigestOutput = {
@@ -96,11 +97,18 @@ export function Feed({ section }: { section: Section }) {
   const [last, setLast] = React.useState<string>("");
   const [msg, setMsg] = React.useState<string>("");
   const [loginOpen, setLoginOpen] = React.useState(false);
+  const [upgradeOpen, setUpgradeOpen] = React.useState(false);
+  const [upgradeReason, setUpgradeReason] = React.useState("");
 
   function requireLogin(): boolean {
     if (authed) return true;
     setLoginOpen(true);
     return false;
+  }
+
+  function showUpgrade(reason?: string) {
+    setUpgradeReason(reason || t(lang, "subscriptionRequired"));
+    setUpgradeOpen(true);
   }
 
   async function load() {
@@ -176,7 +184,13 @@ setLast(new Date().toISOString());
         body: JSON.stringify({ section, days, country: country || null, topic: topic || null, lang }),
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || `Digest failed (${res.status})`);
+      if (!res.ok) {
+        if (j?.upgradeRequired) {
+          showUpgrade(j?.error || t(lang, "subscriptionRequired"));
+          return;
+        }
+        throw new Error(j?.error || `Digest failed (${res.status})`);
+      }
       setDigest(j?.digest || null);
     } catch (e: any) {
       setDigestError(e?.message || "Digest failed");
@@ -197,7 +211,13 @@ setLast(new Date().toISOString());
         body: JSON.stringify({ id, lang }),
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || `Summary failed (${res.status})`);
+      if (!res.ok) {
+        if (j?.upgradeRequired) {
+          showUpgrade(j?.error || t(lang, "subscriptionRequired"));
+          return;
+        }
+        throw new Error(j?.error || `Summary failed (${res.status})`);
+      }
 
       // reload to show cached fields where appropriate
       await load();
@@ -260,6 +280,8 @@ setLast(new Date().toISOString());
           </Card>
         </div>
       ) : null}
+
+      <UpgradeModal open={upgradeOpen} reason={upgradeReason} onClose={() => setUpgradeOpen(false)} />
 
       <Card className="p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
