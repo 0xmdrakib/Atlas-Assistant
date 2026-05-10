@@ -1,5 +1,5 @@
 import type { Section } from "@/lib/types";
-import { generateText as geminiGenerateText } from "@/lib/geminiHttp";
+import { OPENAI_MODELS, isOpenAiEnabled, openaiGenerateText } from "@/lib/openaiHttp";
 
 export type FeedPickCandidate = {
   title: string;
@@ -7,33 +7,25 @@ export type FeedPickCandidate = {
   url: string;
   sourceName?: string | null;
   score: number;
-  publishedAt?: string; // ISO
+  publishedAt?: string;
   country?: string | null;
   topics?: string[];
 };
 
-function requiredEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing required env var: ${name}`);
-  return v;
-}
-
 export function isFeedPickerEnabled(): boolean {
-  return Boolean(process.env.AI_FEED_PICKER_API_KEY);
+  return isOpenAiEnabled();
 }
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
-async function geminiPickIndex(args: {
-  apiKey: string;
-  model: string;
+async function openaiPickIndex(args: {
   section: Section;
   candidates: FeedPickCandidate[];
   timeoutMs?: number;
 }): Promise<number | null> {
-  const { apiKey, model, section, candidates, timeoutMs = 12_000 } = args;
+  const { section, candidates, timeoutMs = 12_000 } = args;
 
   const list = candidates.slice(0, 24).map((c, i) => ({
     i,
@@ -48,42 +40,34 @@ async function geminiPickIndex(args: {
   }));
 
   const prompt = [
-    `You are selecting ONE item to feature in the "${section}" section of a news feed.`,
-    `Pick the single BEST candidate index based on:`,
-    `- quality + credibility (avoid clickbait)`,
-    `- relevance to the section`,
-    `- novelty / impact`,
-    `- prefers higher score if quality is similar`,
-    `If none are good enough, return null.`,
-    `Return ONLY JSON matching the provided schema.`,
+    `Select one item to feature in the "${section}" section of a news feed.`,
+    `Pick the single best candidate index based on quality, credibility, relevance, novelty, and impact.`,
+    `Avoid clickbait. Prefer higher score if quality is similar. If none are good enough, return null.`,
     ``,
     JSON.stringify({ section, candidates: list }),
   ].join("\n");
 
   const schema = {
     type: "object",
+    additionalProperties: false,
     properties: {
-      pickIndex: { type: ["integer", "null"], description: "Index of the chosen candidate (field i), or null." },
+      pickIndex: { type: ["integer", "null"] },
     },
     required: ["pickIndex"],
-    additionalProperties: false,
   };
 
-  const raw = await geminiGenerateText({
-      apiKey,
-      model,
-      prompt,
-      systemInstruction: "Return only JSON.",
-      temperature: 0.1,
-      maxOutputTokens: 64,
-      responseMimeType: "application/json",
-      responseSchema: schema,
-      timeoutMs,
-      retries: 1,
-    });
+  const raw = await openaiGenerateText({
+    model: OPENAI_MODELS.feedPicker,
+    prompt,
+    instructions: "Return only JSON.",
+    temperature: 0.1,
+    maxOutputTokens: 64,
+    jsonSchema: { name: "atlas_feed_pick", schema },
+    timeoutMs,
+    retries: 1,
+  });
 
   if (!raw) return null;
-
   const parsed: any = JSON.parse(String(raw).trim());
   const idx = parsed?.pickIndex;
 
@@ -91,20 +75,15 @@ async function geminiPickIndex(args: {
   const n = Number(idx);
   if (!Number.isFinite(n)) return null;
 
-  // Defensive clamp.
-  const i = clamp(Math.trunc(n), 0, candidates.length - 1);
-  return i;
+  return clamp(Math.trunc(n), 0, candidates.length - 1);
 }
 
 export async function aiPickFeedCandidateIndex(section: Section, candidates: FeedPickCandidate[]): Promise<number | null> {
   if (!isFeedPickerEnabled()) return null;
   if (!candidates || candidates.length === 0) return null;
 
-  const apiKey = requiredEnv("AI_FEED_PICKER_API_KEY");
-  const model = process.env.AI_FEED_PICKER_MODEL || "gemini-3-flash-preview";
-
   try {
-    return await geminiPickIndex({ apiKey, model, section, candidates });
+    return await openaiPickIndex({ section, candidates });
   } catch (e) {
     console.warn("aiPickFeedCandidateIndex failed", e);
     return null;
