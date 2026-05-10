@@ -182,10 +182,10 @@ export function SettingsMenu() {
       </Button>
 
       {open ? (
-        <Card className="absolute right-0 mt-2 w-[320px] p-4 shadow-xl">
+        <Card className="absolute right-0 mt-2 w-[320px] border-[hsl(var(--border))] bg-solid-surface p-4 shadow-2xl">
           <div className="space-y-4">
             {/* 1) Profile / Auth */}
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-soft bg-glass p-3">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-soft bg-solid-muted p-3">
               <div className="flex items-center gap-3 min-w-0">
                 {authed && session?.user?.image ? (
                   // Use <img> to avoid Next Image remotePatterns config.
@@ -244,7 +244,7 @@ export function SettingsMenu() {
                   setLangOpen(false);
                   setUpgradeOpen(true);
                 }}
-                className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-subtle px-3 py-2 text-sm transition focus-ring hover-subtle-2"
+                className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-solid-muted px-3 py-2 text-sm transition focus-ring hover-subtle-2"
               >
                 <span className="inline-flex items-center gap-2">
                   <CreditCard size={16} />
@@ -262,7 +262,7 @@ export function SettingsMenu() {
                 <button
                   ref={langBtnRef}
                   onClick={() => setLangOpen((v) => !v)}
-                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-subtle px-3 py-2 text-sm transition focus-ring hover-subtle-2"
+                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-solid-muted px-3 py-2 text-sm transition focus-ring hover-subtle-2"
                 >
                   <span className="inline-flex items-center gap-2">
                     <Globe size={16} />
@@ -273,12 +273,12 @@ export function SettingsMenu() {
 
                 {langOpen ? (
                   <div
-                    className={`absolute right-0 z-50 w-[340px] overflow-hidden rounded-2xl border border-soft bg-glass-strong shadow-2xl backdrop-blur ${
+                    className={`absolute right-0 z-50 w-[340px] overflow-hidden rounded-2xl border border-soft bg-solid-surface shadow-2xl ${
                       langSide === "bottom" ? "top-[calc(100%+10px)]" : "bottom-[calc(100%+10px)]"
                     }`}
                   >
                     <div className="p-3 border-b border-soft">
-                      <div className="flex items-center gap-2 rounded-xl border border-soft bg-subtle px-3 py-2">
+                      <div className="flex items-center gap-2 rounded-xl border border-soft bg-solid-muted px-3 py-2">
                         <Search size={16} className="text-muted" />
                         <input
                           value={query}
@@ -374,7 +374,7 @@ export function SettingsMenu() {
                     setLangOpen(false);
                     signOut();
                   }}
-                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-subtle px-3 py-2 text-sm transition focus-ring hover-subtle-2"
+                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-solid-muted px-3 py-2 text-sm transition focus-ring hover-subtle-2"
                 >
                   <span className="inline-flex items-center gap-2">
                     <LogOut size={16} />
