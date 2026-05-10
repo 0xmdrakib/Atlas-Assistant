@@ -2,7 +2,7 @@ import crypto from "crypto";
 
 const NOWPAYMENTS_BASE = "https://api.nowpayments.io/v1";
 const MOONPAY_BASE = "https://buy.moonpay.com";
-const DEFAULT_CARD_CRYPTO_CODES = ["usdttrc20", "usdc", "btc", "eth", "ltc"];
+const FASTEST_CARD_CRYPTO_CODE = "usdttrc20";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -44,20 +44,8 @@ export function subscriptionPrice() {
   };
 }
 
-export function cardCryptoCodes(): string[] {
-  const raw = process.env.MOONPAY_CARD_CRYPTO_CODES || "";
-  const fromEnv = raw
-    .split(",")
-    .map((x) => x.trim().toLowerCase())
-    .filter(Boolean);
-  return Array.from(new Set(fromEnv.length ? fromEnv : DEFAULT_CARD_CRYPTO_CODES));
-}
-
-export function normalizeCardPayCurrency(input: string | null | undefined): string {
-  const requested = String(input || "").trim().toLowerCase();
-  const allowed = cardCryptoCodes();
-  if (requested && allowed.includes(requested)) return requested;
-  return allowed[0] || "usdttrc20";
+export function cardCryptoCode(): string {
+  return (process.env.MOONPAY_CARD_CRYPTO_CODE || FASTEST_CARD_CRYPTO_CODE).trim().toLowerCase();
 }
 
 export async function createNowpaymentsInvoice(args: {
@@ -82,10 +70,9 @@ export async function createNowpaymentsInvoice(args: {
 export async function createNowpaymentsDirectPayment(args: {
   orderId: string;
   userEmail?: string | null;
-  payCurrency?: string | null;
 }) {
   const price = subscriptionPrice();
-  const payCurrency = normalizeCardPayCurrency(args.payCurrency);
+  const payCurrency = cardCryptoCode();
 
   return nowpaymentsPost("/payment", {
     price_amount: Number(price.amount),
@@ -107,11 +94,11 @@ export function buildSignedMoonpayUrl(args: {
   quoteCurrencyAmount: string;
   orderId: string;
   userEmail?: string | null;
-  currencyCode: string;
+  currencyCode?: string | null;
 }) {
   const publicKey = requiredEnv("MOONPAY_PUBLIC_KEY");
   const secretKey = requiredEnv("MOONPAY_SECRET_KEY");
-  const currencyCode = normalizeCardPayCurrency(args.currencyCode);
+  const currencyCode = String(args.currencyCode || cardCryptoCode()).trim().toLowerCase();
 
   const url = new URL(MOONPAY_BASE);
   url.searchParams.set("apiKey", publicKey);
