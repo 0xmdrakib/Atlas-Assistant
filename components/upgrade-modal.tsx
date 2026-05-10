@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BadgePercent, Coins, CreditCard, Sparkles } from "lucide-react";
+import { BadgePercent, Coins, CreditCard, Sparkles, X } from "lucide-react";
 import { signIn, useSession } from "next-auth/react";
 import { Button, Card } from "@/components/ui";
 import { useLanguage } from "@/components/language-provider";
@@ -328,8 +328,8 @@ export function UpgradeModal({
         )}
 
         <div className="mt-4 flex justify-end">
-          <Button variant="ghost" onClick={onClose} disabled={Boolean(loading)}>
-            {t(lang, "notNow")}
+          <Button variant="ghost" onClick={onClose} disabled={Boolean(loading)} aria-label={t(lang, "notNow")}>
+            <X size={16} />
           </Button>
         </div>
       </Card>
