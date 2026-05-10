@@ -97,11 +97,14 @@ model PaymentSession {
   id          String   @id @default(cuid())
   userId      String
   orderId     String   @unique
-  method      String   // "crypto" | "card"
+  method      String   // "crypto" | "card" | "discount"
   status      String   @default("pending")
 
   priceAmount   String
   priceCurrency String
+  finalPriceAmount String?
+  discountCode String?
+  discountPercentOff Int?
   payAmount     String?
   payCurrency   String?
   payAddress    String?
@@ -120,6 +123,7 @@ model PaymentSession {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  discountRedemptions DiscountRedemption[]
 
   @@index([userId, status])
   @@index([orderId])
@@ -151,6 +155,42 @@ model TranslationUnlock {
 
   @@unique([userId, periodKey, lang])
   @@index([userId, periodKey])
+}
+
+model DiscountCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  percentOff Int
+  maxRedemptions Int?
+  redeemedCount Int @default(0)
+  active    Boolean  @default(true)
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  redemptions DiscountRedemption[]
+
+  @@index([active])
+  @@index([expiresAt])
+}
+
+model DiscountRedemption {
+  id        String   @id @default(cuid())
+  discountCodeId String
+  userId    String
+  paymentSessionId String?
+  percentOff Int
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  redeemedAt DateTime?
+
+  discountCode DiscountCode @relation(fields: [discountCodeId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentSession PaymentSession? @relation(fields: [paymentSessionId], references: [id], onDelete: SetNull)
+
+  @@unique([discountCodeId, userId])
+  @@index([userId])
+  @@index([status])
 }
 
 // --- Cached translations for non-English UI mode ---
@@ -187,6 +227,7 @@ model User {
   aiUsages      AiUsage[]
   paymentSessions PaymentSession[]
   translationUnlocks TranslationUnlock[]
+  discountRedemptions DiscountRedemption[]
   subscriptionPlan String @default("free")
   subscriptionStatus String @default("free")
   subscriptionCurrentPeriodStart DateTime?
