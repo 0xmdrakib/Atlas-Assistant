@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Menu, Globe, Search, Check, ChevronDown, LogOut, CreditCard } from "lucide-react";
+import { Menu, Globe, Search, Check, ChevronDown, LogOut, CreditCard, Shield } from "lucide-react";
 import { Card, Button, Pill } from "@/components/ui";
 import { LANGUAGES, languageByCode } from "@/lib/i18n";
 import { useLanguage } from "@/components/language-provider";
@@ -21,6 +21,7 @@ function normalize(s: string) {
 type BillingStatus = {
   plan?: "free" | "paid";
   status?: string;
+  isOwner?: boolean;
   currentPeriodEnd?: string | null;
 };
 
@@ -391,6 +392,24 @@ export function SettingsMenu() {
             </div>
 
             {/* 5) Sign out */}
+            {authed && billingStatus?.isOwner ? (
+              <div className="pt-2 border-t border-soft">
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setLangOpen(false);
+                    window.location.href = "/admin";
+                  }}
+                  className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-solid-muted px-3 py-2 text-sm transition focus-ring hover-subtle-2"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Shield size={16} />
+                    <span>Admin</span>
+                  </span>
+                </button>
+              </div>
+            ) : null}
+
             {authed ? (
               <div className="pt-2 border-t border-soft">
                 <button
