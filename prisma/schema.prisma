@@ -92,8 +92,7 @@ model AiUsage {
 }
 
 // --- Billing / subscription state ---
-// v1 uses NOWPayments as the subscription source of truth. MoonPay is only a
-// card-to-crypto bridge into a NOWPayments payment address.
+// v1 supports NOWPayments crypto checkout and Paddle card subscriptions.
 model PaymentSession {
   id          String   @id @default(cuid())
   userId      String
@@ -111,8 +110,10 @@ model PaymentSession {
   nowpaymentsPaymentId String? @unique
   nowpaymentsPurchaseId String?
   invoiceUrl           String?
-  moonpayUrl           String?
-  moonpayTransactionId String?
+
+  checkoutUrl          String?
+  paddleTransactionId  String? @unique
+  paddleSubscriptionId String?
 
   rawProviderData Json?
   createdAt DateTime @default(now())
@@ -190,6 +191,9 @@ model User {
   subscriptionStatus String @default("free")
   subscriptionCurrentPeriodStart DateTime?
   subscriptionCurrentPeriodEnd DateTime?
+  subscriptionProvider String?
+  subscriptionProviderCustomerId String?
+  subscriptionProviderSubscriptionId String? @unique
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
