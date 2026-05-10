@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { claimDiscountForUser } from "@/lib/discounts";
 import { prisma } from "@/lib/prisma";
 import { createNowpaymentsInvoice, subscriptionPrice } from "@/lib/paymentProviders";
 import { resolveUserIdFromSession } from "@/lib/sessionUser";
@@ -11,13 +12,15 @@ function orderId(userId: string) {
   return `atlas_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return Response.json({ ok: false, error: "Sign in required" }, { status: 401 });
 
   const userId = await resolveUserIdFromSession(session);
   if (!userId) return Response.json({ ok: false, error: "User id missing" }, { status: 401 });
 
+  const body = await req.json().catch(() => null);
+  const discountCode = String(body?.discountCode || "").trim();
   const price = subscriptionPrice();
   const oid = orderId(userId);
   const row = await prisma.paymentSession.create({
@@ -32,9 +35,27 @@ export async function POST() {
   });
 
   try {
+    const claim = discountCode
+      ? await claimDiscountForUser({
+          code: discountCode,
+          userId,
+          amount: price.amount,
+          currency: price.currency,
+          paymentSessionId: row.id,
+          status: "pending",
+        })
+      : null;
+
+    if (claim?.price.percentOff === 100) {
+      throw new Error("Use free activation for a 100% discount code");
+    }
+
     const invoice = await createNowpaymentsInvoice({
       orderId: oid,
       userEmail: session.user?.email || null,
+      amount: claim?.price.finalAmount || price.amount,
+      discountCode: claim?.discount.code || null,
+      discountPercentOff: claim?.discount.percentOff || null,
     });
 
     await prisma.paymentSession.update({
@@ -42,6 +63,9 @@ export async function POST() {
       data: {
         nowpaymentsInvoiceId: invoice?.id ? String(invoice.id) : null,
         invoiceUrl: invoice?.invoice_url ? String(invoice.invoice_url) : null,
+        discountCode: claim?.discount.code || null,
+        discountPercentOff: claim?.discount.percentOff || null,
+        finalPriceAmount: claim?.price.finalAmount || price.amount,
         rawProviderData: invoice,
       },
     });
