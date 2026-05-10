@@ -4,11 +4,7 @@ export const runtime = "nodejs";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  buildSignedMoonpayUrl,
-  createNowpaymentsDirectPayment,
-  subscriptionPrice,
-} from "@/lib/paymentProviders";
+import { createPaddleCheckoutTransaction, subscriptionPrice } from "@/lib/paymentProviders";
 import { resolveUserIdFromSession } from "@/lib/sessionUser";
 
 function orderId(userId: string) {
@@ -36,41 +32,30 @@ export async function POST() {
   });
 
   try {
-    const payment = await createNowpaymentsDirectPayment({
+    const transaction = await createPaddleCheckoutTransaction({
       orderId: oid,
+      paymentSessionId: row.id,
+      userId,
       userEmail: session.user?.email || null,
     });
 
-    const payAddress = payment?.pay_address ? String(payment.pay_address) : "";
-    const payAmount = payment?.pay_amount ? String(payment.pay_amount) : "";
-    if (!payAddress || !payAmount) {
-      throw new Error("NOWPayments did not return a deposit address and amount");
-    }
-
-    const moonpayUrl = buildSignedMoonpayUrl({
-      walletAddress: payAddress,
-      quoteCurrencyAmount: payAmount,
-      orderId: oid,
-      userEmail: session.user?.email || null,
-      currencyCode: payment?.pay_currency ? String(payment.pay_currency) : null,
-    });
+    const data = transaction?.data || {};
+    const checkoutUrl = data?.checkout?.url ? String(data.checkout.url) : "";
+    if (!checkoutUrl) throw new Error("Paddle did not return a checkout URL");
 
     await prisma.paymentSession.update({
       where: { id: row.id },
       data: {
-        nowpaymentsPaymentId: payment?.payment_id ? String(payment.payment_id) : null,
-        nowpaymentsPurchaseId: payment?.purchase_id ? String(payment.purchase_id) : null,
-        payAddress,
-        payAmount,
-        payCurrency: payment?.pay_currency ? String(payment.pay_currency).toLowerCase() : null,
-        moonpayUrl,
-        rawProviderData: payment,
+        paddleTransactionId: data?.id ? String(data.id) : null,
+        paddleSubscriptionId: data?.subscription_id ? String(data.subscription_id) : null,
+        checkoutUrl,
+        rawProviderData: transaction,
       },
     });
 
-    return Response.json({ ok: true, url: moonpayUrl, orderId: oid });
+    return Response.json({ ok: true, url: checkoutUrl, orderId: oid });
   } catch (e: any) {
     await prisma.paymentSession.update({ where: { id: row.id }, data: { status: "failed" } }).catch(() => null);
-    return Response.json({ ok: false, error: e?.message || "Card bridge failed" }, { status: 500 });
+    return Response.json({ ok: false, error: e?.message || "Card checkout failed" }, { status: 500 });
   }
 }
