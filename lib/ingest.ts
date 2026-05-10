@@ -178,7 +178,7 @@ const CATEGORY_RULES: Record<CanonicalSection, Array<{ code: string; keywords: s
     { code: "law", keywords: ["court", "trial", "ruling", "law", "supreme"] },
   ],
   tech: [
-    { code: "ai", keywords: ["ai", "llm", "model", "agent", "openai", "gemini", "anthropic"] },
+    { code: "ai", keywords: ["ai", "llm", "model", "agent", "openai", "anthropic"] },
     { code: "cybersecurity", keywords: ["security", "breach", "ransomware", "vulnerability", "cve", "phishing"] },
     { code: "cloud", keywords: ["cloud", "kubernetes", "docker", "aws", "azure", "gcp"] },
     { code: "hardware", keywords: ["chip", "semiconductor", "gpu", "nvidia", "amd", "arm"] },
@@ -918,7 +918,7 @@ export async function ingestOnce() {
 
     addedThisRun[sec] = 0;
 
-    // Default picker: Gemini (optional). If it fails or is disabled, we fall back to the local score-sorted pool.
+    // Default picker: OpenAI (optional). If it fails or is disabled, we fall back to the local score-sorted pool.
     if (!fastMode) {
       aiPickerAttempts += 1;
       const aiIdx = await aiPickFeedCandidateIndex(
