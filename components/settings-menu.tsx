@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Menu, Globe, Search, Check, ChevronDown, LogOut } from "lucide-react";
+import { Menu, Globe, Search, Check, ChevronDown, LogOut, CreditCard } from "lucide-react";
 import { Card, Button, Pill } from "@/components/ui";
 import { LANGUAGES, languageByCode } from "@/lib/i18n";
 import { useLanguage } from "@/components/language-provider";
 import { useTheme } from "next-themes";
 import { signIn, signOut, useSession } from "next-auth/react";
+import { UpgradeModal } from "@/components/upgrade-modal";
 
 const UI_CACHE_VER = "1";
 function uiCacheKey(lang: string) {
@@ -27,6 +28,10 @@ export function SettingsMenu() {
   const [open, setOpen] = React.useState(false);
   const [langOpen, setLangOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const [upgradeOpen, setUpgradeOpen] = React.useState(false);
+  const [upgradeReason, setUpgradeReason] = React.useState("");
+  const [billingPlan, setBillingPlan] = React.useState<"free" | "paid" | null>(null);
+  const [subscriptionPriceLabel, setSubscriptionPriceLabel] = React.useState("$2.99/mo");
   const ref = React.useRef<HTMLDivElement | null>(null);
   const langBtnRef = React.useRef<HTMLButtonElement | null>(null);
 
@@ -55,6 +60,31 @@ export function SettingsMenu() {
     }
   }, []);
 
+  const reserveLanguage = React.useCallback(
+    async (target: string) => {
+      if (!target || target === "en") return true;
+
+      if (!authed) {
+        setUpgradeReason(t(lang, "subscriptionRequired"));
+        setUpgradeOpen(true);
+        return false;
+      }
+
+      const r = await fetch("/api/billing/translation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lang: target }),
+      });
+      const data = await r.json().catch(() => null);
+      if (r.ok && data?.ok) return true;
+
+      setUpgradeReason(r.status === 429 ? t(lang, "translationLimitReached") : t(lang, "subscriptionRequired"));
+      setUpgradeOpen(true);
+      return false;
+    },
+    [authed, lang, t]
+  );
+
   const filtered = React.useMemo(() => {
     const q = normalize(query);
     if (!q) return LANGUAGES;
@@ -78,6 +108,33 @@ export function SettingsMenu() {
 
   React.useEffect(() => {
     if (!open) setLangOpen(false);
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [statusRes, configRes] = await Promise.all([
+          fetch("/api/billing/status", { cache: "no-store" }),
+          fetch("/api/billing/config", { cache: "no-store" }),
+        ]);
+        const statusData = await statusRes.json().catch(() => null);
+        const configData = await configRes.json().catch(() => null);
+        if (cancelled) return;
+        if (statusData?.ok) setBillingPlan(statusData?.plan === "paid" ? "paid" : "free");
+        if (configData?.ok && configData?.price?.amount) {
+          const amount = String(configData.price.amount);
+          const currency = String(configData.price.currency || "usd").toUpperCase();
+          setSubscriptionPriceLabel(`${currency} ${amount}/mo`);
+        }
+      } catch {
+        if (!cancelled) setBillingPlan(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   const computeLangPlacement = React.useCallback(() => {
@@ -118,6 +175,7 @@ export function SettingsMenu() {
 
   return (
     <div className="relative" ref={ref}>
+      <UpgradeModal open={upgradeOpen} reason={upgradeReason} onClose={() => setUpgradeOpen(false)} />
       <Button variant="ghost" className="gap-2" onClick={() => setOpen((v) => !v)} aria-label={t(lang, "settings")}>
         <Menu size={16} />
         <span className="hidden sm:inline">{t(lang, "settings")}</span>
@@ -172,7 +230,33 @@ export function SettingsMenu() {
               ) : null}
             </div>
 
-            {/* 2) Language selector */}
+            {/* 2) Subscription */}
+            <div className="pt-2 border-t border-soft">
+              <button
+                onClick={() => {
+                  if (!authed) {
+                    setOpen(false);
+                    signIn("google");
+                    return;
+                  }
+                  setUpgradeReason(t(lang, "upgradeBody"));
+                  setOpen(false);
+                  setLangOpen(false);
+                  setUpgradeOpen(true);
+                }}
+                className="inline-flex w-full items-center justify-between rounded-xl border border-soft bg-subtle px-3 py-2 text-sm transition focus-ring hover-subtle-2"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <CreditCard size={16} />
+                  <span>{t(lang, "subscription")}</span>
+                </span>
+                <span className="text-xs text-muted">
+                  {billingPlan === "paid" ? t(lang, "proActive") : subscriptionPriceLabel}
+                </span>
+              </button>
+            </div>
+
+            {/* 3) Language selector */}
             <div className="pt-2 border-t border-soft">
               <div className="relative">
                 <button
@@ -215,6 +299,10 @@ export function SettingsMenu() {
                             onClick={async () => {
                               const next = L.code;
                               const changed = next !== lang;
+                              if (changed) {
+                                const allowed = await reserveLanguage(next);
+                                if (!allowed) return;
+                              }
 
                               // Fetch UI strings for the target language (if needed) BEFORE refresh.
                               // This makes the post-refresh UI immediately render in the selected language.
@@ -252,7 +340,7 @@ export function SettingsMenu() {
               </div>
             </div>
 
-            {/* 3) Theme */}
+            {/* 4) Theme */}
             <div className="pt-2 border-t border-soft">
               <div className="text-xs font-medium text-muted">{t(lang, "theme")}</div>
               <div className="mt-2 flex items-center gap-2">
@@ -277,7 +365,7 @@ export function SettingsMenu() {
               </div>
             </div>
 
-            {/* 4) Sign out */}
+            {/* 5) Sign out */}
             {authed ? (
               <div className="pt-2 border-t border-soft">
                 <button
