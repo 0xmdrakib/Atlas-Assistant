@@ -2,8 +2,12 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { ensureTranslationEntitlement } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
 import type { Section } from "@/lib/types";
+import { resolveUserIdFromSession } from "@/lib/sessionUser";
 import { isTranslateEnabled, translateItemBatch } from "@/lib/translateProvider";
 
 
@@ -104,9 +108,23 @@ export async function GET(req: NextRequest) {
   }
 
   const translateEnabled = isTranslateEnabled();
+  let translationAllowed = lang === "en";
+  let translationBlock: any = null;
+
+  if (lang !== "en" && translateEnabled) {
+    const session = await getServerSession(authOptions);
+    const userId = session ? await resolveUserIdFromSession(session) : null;
+    if (!userId) {
+      translationBlock = { error: "Subscription required for translation", upgradeRequired: true };
+    } else {
+      const entitlement = await ensureTranslationEntitlement({ userId, lang });
+      if (entitlement.ok) translationAllowed = true;
+      else translationBlock = { error: entitlement.error, upgradeRequired: entitlement.upgradeRequired };
+    }
+  }
 
   // Apply shared translation cache when requested.
-  if (lang !== "en" && translateEnabled) {
+  if (lang !== "en" && translateEnabled && translationAllowed) {
     const ids = items.map((i) => i.id);
 
     const existing = await prisma.itemTranslation.findMany({
@@ -188,19 +206,22 @@ export async function GET(req: NextRequest) {
       meta: {
         updatedAt: new Date().toISOString(),
         translateEnabled: true,
+        translationAllowed: true,
       },
     }, {
       headers: { "Cache-Control": "no-store" },
     });
   }
 
-  const withAi = await attachAiSummaries(items, lang);
+  const withAi = await attachAiSummaries(items, translationAllowed ? lang : "en");
 
   return Response.json({
     items: withAi,
     meta: {
       updatedAt: new Date().toISOString(),
       translateEnabled,
+      translationAllowed,
+      translationBlocked: translationBlock,
     }
   }, {
     headers: { "Cache-Control": "no-store" },
