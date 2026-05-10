@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ContentItem, Section } from "@/lib/types";
 import { Card, Pill, Button, A, Segmented } from "@/components/ui";
 import { timeAgo } from "@/lib/utils";
-import { Sparkles } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { signIn, useSession } from "next-auth/react";
 import { useLanguage } from "@/components/language-provider";
 import { SpeakButton } from "@/components/speak-button";
@@ -308,8 +308,8 @@ setLast(new Date().toISOString());
             <div className="mt-1 text-sm text-muted">{t(lang, "signInBody")}</div>
 
             <div className="mt-4 flex items-center justify-end gap-2">
-              <Button variant="ghost" onClick={() => setLoginOpen(false)}>
-                {t(lang, "notNow")}
+              <Button variant="ghost" onClick={() => setLoginOpen(false)} aria-label={t(lang, "notNow")}>
+                <X size={16} />
               </Button>
               <Button
                 onClick={() => {
