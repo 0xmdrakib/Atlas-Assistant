@@ -7,7 +7,6 @@ import { prisma } from "@/lib/prisma";
 import {
   buildSignedMoonpayUrl,
   createNowpaymentsDirectPayment,
-  normalizeCardPayCurrency,
   subscriptionPrice,
 } from "@/lib/paymentProviders";
 import { resolveUserIdFromSession } from "@/lib/sessionUser";
@@ -16,15 +15,13 @@ function orderId(userId: string) {
   return `atlas_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export async function POST(req: Request) {
+export async function POST() {
   const session = await getServerSession(authOptions);
   if (!session) return Response.json({ ok: false, error: "Sign in required" }, { status: 401 });
 
   const userId = await resolveUserIdFromSession(session);
   if (!userId) return Response.json({ ok: false, error: "User id missing" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
-  const payCurrency = normalizeCardPayCurrency(body?.payCurrency);
   const price = subscriptionPrice();
   const oid = orderId(userId);
   const row = await prisma.paymentSession.create({
@@ -42,7 +39,6 @@ export async function POST(req: Request) {
     const payment = await createNowpaymentsDirectPayment({
       orderId: oid,
       userEmail: session.user?.email || null,
-      payCurrency,
     });
 
     const payAddress = payment?.pay_address ? String(payment.pay_address) : "";
@@ -56,7 +52,7 @@ export async function POST(req: Request) {
       quoteCurrencyAmount: payAmount,
       orderId: oid,
       userEmail: session.user?.email || null,
-      currencyCode: payment?.pay_currency ? String(payment.pay_currency) : payCurrency,
+      currencyCode: payment?.pay_currency ? String(payment.pay_currency) : null,
     });
 
     await prisma.paymentSession.update({
