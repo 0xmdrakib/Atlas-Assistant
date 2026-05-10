@@ -4,6 +4,9 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { aiDigest } from "@/lib/aiProviders";
 import { enforceAndIncrementAiUsage } from "@/lib/aiQuota";
+import { ensureTranslationEntitlement } from "@/lib/billing";
+import { isOpenAiEnabled } from "@/lib/openaiHttp";
+import { resolveUserIdFromSession } from "@/lib/sessionUser";
 
 const ALLOWED_SECTIONS = new Set<Section>([
   "global",
@@ -37,10 +40,7 @@ function singleFlightMap(): Map<string, Promise<any>> {
 }
 
 function enabled() {
-  return (
-    String(process.env.AI_SUMMARY_ENABLED || "false").toLowerCase() === "true" &&
-    Boolean(process.env.AI_SUMMARY_API_KEY)
-  );
+  return isOpenAiEnabled();
 }
 
 function normalizeKind(raw: unknown): Kind {
@@ -74,16 +74,7 @@ function digestCacheKey(
   return `digest:${section}:${kind}:${days}:${country || "*"}:${topic || "*"}:${lang || "en"}`;
 }
 
-async function resolveUserIdFromSession(session: any): Promise<string | null> {
-  const id = session?.user ? (session.user as any).id : null;
-  if (id) return String(id);
-  const email = session?.user?.email ? String(session.user.email) : null;
-  if (!email) return null;
-  const u = await prisma.user.findUnique({ where: { email } }).catch(() => null);
-  return u?.id || null;
-}
-
-// AI implementation lives in lib/aiProviders.ts (Gemini default)
+// AI implementation lives in lib/aiProviders.ts (OpenAI only)
 
 export async function POST(req: Request) {
   if (!enabled()) return Response.json({ ok: false, error: "AI summary disabled" }, { status: 403 });
@@ -102,6 +93,17 @@ export async function POST(req: Request) {
   const country = body?.country ? String(body.country).toUpperCase() : null;
   const topic = body?.topic ? String(body.topic).toLowerCase().trim().replace(/\s+/g, "-") : null;
   const lang = body?.lang ? String(body.lang).toLowerCase() : "en";
+
+  if (lang !== "en") {
+    const entitlement = await ensureTranslationEntitlement({ userId, lang });
+    if (!entitlement.ok) {
+      const { ok, ...blocked } = entitlement;
+      return Response.json(
+        { ok: false, ...blocked },
+        { status: entitlement.upgradeRequired ? 402 : 429 }
+      );
+    }
+  }
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -174,7 +176,16 @@ export async function POST(req: Request) {
 
     const quota = await enforceAndIncrementAiUsage({ userId, kind: "digest" });
     if (!quota.ok) {
-      return { ok: false, error: "Daily AI limit reached", remaining: quota.remaining, _status: 429 };
+      return {
+        ok: false,
+        error: "Daily AI digest limit reached",
+        remaining: quota.remaining,
+        limit: quota.limit,
+        plan: quota.plan,
+        resetAt: quota.resetAt,
+        upgradeRequired: quota.upgradeRequired,
+        _status: 429,
+      };
     }
 
     let digestJson = "";
