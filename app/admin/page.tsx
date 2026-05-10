@@ -1,73 +1,77 @@
+import { AdminBillingPanel } from "@/components/admin-billing-panel";
+import { requireOwnerSession } from "@/lib/owner";
 import { prisma } from "@/lib/prisma";
 
-export default async function AdminPage({ searchParams }: { searchParams: { token?: string } }) {
-  const token = searchParams?.token || "";
-  const ok = token && process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN;
+export const dynamic = "force-dynamic";
 
-  if (!ok) {
+export default async function AdminPage() {
+  const session = await requireOwnerSession();
+
+  if (!session) {
     return (
       <div className="mx-auto max-w-xl px-6 py-10">
         <div className="rounded-2xl border border-soft bg-surface p-6 shadow-soft">
           <div className="text-lg font-semibold">Admin locked</div>
-          <div className="mt-2 text-sm text-muted">
-            Open <code className="rounded bg-subtle-2 px-1">/admin?token=YOUR_ADMIN_TOKEN</code>
-          </div>
+          <div className="mt-2 text-sm text-muted">Sign in with the owner email configured in OWNER_EMAILS.</div>
         </div>
       </div>
     );
   }
 
-  const sources = await prisma.source.findMany({ orderBy: [{ section: "asc" }, { trustScore: "desc" }] });
-  const counts = await prisma.item.groupBy({ by: ["section"], _count: { _all: true } });
+  const [users, discounts, counts] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        createdAt: true,
+        subscriptionPlan: true,
+        subscriptionStatus: true,
+        subscriptionCurrentPeriodEnd: true,
+        subscriptionProvider: true,
+        paymentSessions: {
+          orderBy: { createdAt: "desc" },
+          take: 3,
+          select: {
+            id: true,
+            method: true,
+            status: true,
+            priceAmount: true,
+            finalPriceAmount: true,
+            priceCurrency: true,
+            discountCode: true,
+            discountPercentOff: true,
+            createdAt: true,
+          },
+        },
+      },
+    }),
+    prisma.discountCode.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { redemptions: true } } },
+    }),
+    prisma.item.groupBy({ by: ["section"], _count: { _all: true } }),
+  ]);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <div className="rounded-2xl border border-soft bg-surface p-6 shadow-soft">
-        <div className="text-xl font-semibold">Admin</div>
-        <div className="mt-1 text-sm text-muted">
-          Sources + DB counts. Edit sources in <code className="rounded bg-subtle-2 px-1">sources/seed-sources.json</code> then run seed + ingest.
-        </div>
-
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          {counts.map((c) => (
-            <div key={c.section} className="rounded-2xl border border-soft bg-subtle-2 p-3">
-              <div className="text-xs text-muted">{c.section}</div>
-              <div className="text-lg font-semibold">{c._count._all}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-6 overflow-auto rounded-2xl border border-soft">
-          <table className="min-w-full text-sm">
-            <thead className="bg-subtle-2 text-muted">
-              <tr>
-                <th className="px-3 py-2 text-left">Section</th>
-                <th className="px-3 py-2 text-left">Name</th>
-                <th className="px-3 py-2 text-left">Country</th>
-                <th className="px-3 py-2 text-left">Trust</th>
-                <th className="px-3 py-2 text-left">Enabled</th>
-                <th className="px-3 py-2 text-left">URL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sources.map((s) => (
-                <tr key={s.id} className="border-t border-soft">
-                  <td className="px-3 py-2">{s.section}</td>
-                  <td className="px-3 py-2">{s.name}</td>
-                  <td className="px-3 py-2">{s.country || ""}</td>
-                  <td className="px-3 py-2">{s.trustScore}</td>
-                  <td className="px-3 py-2">{String(s.enabled)}</td>
-                  <td className="px-3 py-2">
-                    <a className="underline underline-offset-4 hover:opacity-80" href={s.url} target="_blank">
-                      link
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    <AdminBillingPanel
+      ownerEmail={session.user?.email || ""}
+      users={users.map((u) => ({
+        ...u,
+        createdAt: u.createdAt.toISOString(),
+        subscriptionCurrentPeriodEnd: u.subscriptionCurrentPeriodEnd?.toISOString() || null,
+        paymentSessions: u.paymentSessions.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() })),
+      }))}
+      discounts={discounts.map((d) => ({
+        ...d,
+        createdAt: d.createdAt.toISOString(),
+        updatedAt: d.updatedAt.toISOString(),
+        expiresAt: d.expiresAt?.toISOString() || null,
+      }))}
+      counts={counts.map((c) => ({ section: c.section, count: c._count._all }))}
+    />
   );
 }
