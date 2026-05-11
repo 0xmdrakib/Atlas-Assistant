@@ -2,6 +2,7 @@ import Parser from "rss-parser";
 import { prisma } from "@/lib/prisma";
 import { SECTION_POLICIES } from "@/lib/section-policy";
 import { aiPickFeedCandidateIndex } from "@/lib/feedPicker";
+import { computeRelevanceScore } from "@/lib/section-keywords";
 import seedSources from "../sources/seed-sources.json";
 
 type FeedItem = {
@@ -100,6 +101,38 @@ function sectionAliases(canonical: CanonicalSection): string[] {
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?(p|div|h[1-6]|li|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#\d+;/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+const SNIPPET_MAX_LENGTH = 3000;
+
+function extractSnippet(item: any): string {
+  const content = asText(item.content || "");
+  const contentSnippet = asText(item.contentSnippet || "");
+  const summary = asText(item.summary || "");
+
+  let text = "";
+  if (content.length > 200) {
+    text = stripHtml(content);
+  }
+  if (text.length < 200) {
+    text = contentSnippet || summary || stripHtml(content);
+  }
+
+  return text.replace(/\s+/g, " ").trim().slice(0, SNIPPET_MAX_LENGTH);
 }
 
 function hoursBetween(a: Date, b: Date) {
@@ -277,8 +310,8 @@ function qualityScore(title: string, snippet: string) {
 
   // Base: prefer descriptive titles + non-empty snippets.
   const titleLen = clamp(t.length, 0, 140);
-  const snippetLen = clamp(s.length, 0, 480);
-  const base = 0.55 * (titleLen / 140) + 0.45 * (snippetLen / 480);
+  const snippetLen = clamp(s.length, 0, SNIPPET_MAX_LENGTH);
+  const base = 0.55 * (titleLen / 140) + 0.45 * (snippetLen / SNIPPET_MAX_LENGTH);
 
   // Penalties: promo/low-signal patterns.
   const text = `${t} ${s}`.toLowerCase();
@@ -309,8 +342,9 @@ function scoreCandidate(
   let kw = 0;
   for (const k of policy.keywordBoosts) if (text.includes(k.keyword)) kw += k.boost;
 
-  // Trust and recency dominate, but keyword + quality help when sources are noisy.
-  let score = 0.42 * rs + 0.33 * trust + 0.18 * qualityScore(title, snippet) + 0.07 * clamp(kw, 0, 0.25);
+  const relevance = computeRelevanceScore(section, title, snippet);
+
+  let score = 0.35 * rs + 0.27 * trust + 0.15 * qualityScore(title, snippet) + 0.07 * clamp(kw, 0, 0.25) + 0.16 * relevance;
 
   // Diversity: if this source already won recently in this section, nudge it down
   // so other high-quality sources get a chance.
@@ -862,10 +896,7 @@ export async function ingestOnce() {
         const title = asText((it as any).title).trim();
         const urlRaw = asText((it as any).link || (it as any).url || (it as any).guid).trim();
         const url = urlRaw.startsWith("http") ? normalizeUrl(urlRaw) : "";
-        const snippet = asText((it as any).contentSnippet || (it as any).content || (it as any).summary || "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 480);
+        const snippet = extractSnippet(it);
         const topics = extractTopics(sec, title, snippet);
 
         if (!title || !url) return null;
@@ -918,12 +949,34 @@ export async function ingestOnce() {
 
     addedThisRun[sec] = 0;
 
-    // Default picker: OpenAI (optional). If it fails or is disabled, we fall back to the local score-sorted pool.
-    if (!fastMode) {
+    // Two-layer picking: Layer 1 filters by relevance + score to get top 2 candidates.
+    // Layer 2 uses AI to pick the best one from those 2.
+    const scoredPool = pool.map((c) => ({
+      ...c,
+      relevance: computeRelevanceScore(sec as CanonicalSection, c.title, c.snippet),
+    }));
+
+    scoredPool.sort((a, b) => {
+      const scoreA = a.score + a.relevance * 0.3;
+      const scoreB = b.score + b.relevance * 0.3;
+      return scoreB - scoreA;
+    });
+
+    const noDupes = scoredPool.filter(
+      (c) => !(noRepeatHours > 0 && recentUrlBySection[sec].has(c.url))
+    );
+    const topCandidates = noDupes.slice(0, 2);
+
+    if (topCandidates.length === 0) continue;
+
+    let chosenCandidate = topCandidates[0];
+
+    // Layer 2: AI picks the better of the 2 candidates (only if 2+ candidates and AI enabled).
+    if (!fastMode && topCandidates.length >= 2) {
       aiPickerAttempts += 1;
       const aiIdx = await aiPickFeedCandidateIndex(
         sec as any,
-        pool.map((c) => ({
+        topCandidates.map((c) => ({
           title: c.title,
           snippet: c.snippet,
           url: c.url,
@@ -935,47 +988,40 @@ export async function ingestOnce() {
         }))
       );
 
-      if (aiIdx !== null && aiIdx >= 0 && aiIdx < pool.length) {
+      if (aiIdx !== null && aiIdx >= 0 && aiIdx < topCandidates.length) {
         aiPickerUsed += 1;
-        const [chosen] = pool.splice(aiIdx, 1);
-        if (chosen) pool.unshift(chosen);
+        chosenCandidate = topCandidates[aiIdx];
       }
     }
 
-    for (const candidate of pool) {
-      if (noRepeatHours > 0 && recentUrlBySection[sec].has(candidate.url)) continue;
+    try {
+      await prisma.item.create({
+        data: {
+          sourceId: chosenCandidate.sourceId,
+          section: sec,
+          title: chosenCandidate.title,
+          summary: chosenCandidate.snippet || chosenCandidate.title,
+          aiSummary: null,
+          url: chosenCandidate.url,
+          country: chosenCandidate.country,
+          topics: chosenCandidate.topics,
+          score: chosenCandidate.score,
+          publishedAt: chosenCandidate.publishedAt,
+        },
+      });
 
-      try {
-        await prisma.item.create({
-          data: {
-            sourceId: candidate.sourceId,
-            section: sec,
-            title: candidate.title,
-            summary: candidate.snippet || candidate.title,
-            aiSummary: null,
-            url: candidate.url,
-            country: candidate.country,
-            topics: candidate.topics,
-            score: candidate.score,
-            publishedAt: candidate.publishedAt,
-          },
-        });
-
-        addedThisRun[sec] = 1;
-        added += 1;
-        bumpWindowCounts(sec, new Date());
-        if (noRepeatHours > 0) recentUrlBySection[sec].add(candidate.url);
-        break;
-      } catch (e: any) {
-        const code = e?.code || "";
-        const msg = String(e || "");
-        const isUnique = code === "P2002" || msg.includes("P2002") || msg.toLowerCase().includes("unique");
-        if (isUnique) {
-          skipped += 1;
-          continue;
-        }
+      addedThisRun[sec] = 1;
+      added += 1;
+      bumpWindowCounts(sec, new Date());
+      if (noRepeatHours > 0) recentUrlBySection[sec].add(chosenCandidate.url);
+    } catch (e: any) {
+      const code = e?.code || "";
+      const msg = String(e || "");
+      const isUnique = code === "P2002" || msg.includes("P2002") || msg.toLowerCase().includes("unique");
+      if (!isUnique) {
         skipped += 1;
-        break;
+      } else {
+        skipped += 1;
       }
     }
   }
