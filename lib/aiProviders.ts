@@ -1,5 +1,6 @@
 import { languageLabel as uiLanguageLabel } from "@/lib/i18n";
 import { OPENAI_MODELS, openaiGenerateText } from "@/lib/openaiHttp";
+import { getSectionDescription } from "@/lib/section-keywords";
 
 function langLabel(lang?: string): string {
   const key = String(lang || "en").toLowerCase();
@@ -65,9 +66,10 @@ Strict rules:
 1) Plain text only. No markdown.
 2) Do not use bullet characters or asterisks for emphasis.
 3) Do not invent facts. If something is missing or unclear, write "unclear".
-4) Preserve key entities, locations, numbers, and timelines when they appear in the input.
+4) Preserve key entities, locations, numbers, timelines, and technical details when they appear in the input.
 5) Keep these section labels in English exactly: "TLDR:", "Key points:", "Context:", "Why it matters:".
 6) Minimum content: TLDR + 4 key points + Context + Why it matters.
+7) Use the article excerpt as the primary source of truth. If the excerpt seems incomplete, note what is unclear rather than guessing.
 
 Use this exact format:
 TLDR: <one sentence>
@@ -80,15 +82,15 @@ Context: <1-2 sentences>
 Why it matters: <1-2 sentences>
 
 TITLE: ${args.title}
-SNIPPET: ${args.snippet || ""}
-URL: ${args.url}`;
+ARTICLE EXCERPT: ${args.snippet || ""}
+SOURCE: ${args.url}`;
 
   const out = await openaiGenerateText({
     model: OPENAI_MODELS.summary,
     prompt,
-    instructions: "You write compact, factual summaries.",
+    instructions: "You write compact, factual summaries based on the provided excerpt. Never fabricate details not present in the input.",
     temperature: 0.2,
-    maxOutputTokens: 1000,
+    maxOutputTokens: 1500,
     timeoutMs: 25_000,
     retries: 1,
   });
@@ -109,18 +111,43 @@ export async function aiDigest(args: {
   days: number;
   country: string | null;
   topic: string | null;
-  items: Array<{ title: string; sourceName: string; url: string }>;
+  items: Array<{ title: string; sourceName: string; url: string; summary: string }>;
   lang?: string;
 }): Promise<string> {
   const targetLang = langLabel(args.lang);
   const itemCount = args.items.length;
+  const sectionDesc = getSectionDescription(args.section as any) || "General news.";
 
-  const prompt = `Create a professional, readable digest for a curated feed.
+  const itemsText = args.items
+    .map((i, idx) => {
+      const desc = i.summary ? i.summary.slice(0, 200) : "";
+      return `${idx + 1}. [${i.sourceName}] ${i.title}${desc ? "\n   " + desc : ""}`;
+    })
+    .join("\n");
 
-Section: ${args.section}
+  const isWeekly = args.days >= 7;
+
+  const sizing = isWeekly
+    ? `This is a weekly digest (${args.days} days). Use a comprehensive size:
+- overview: 6-10 short sentences
+- themes: 5-8 entries
+- highlights: 10-16 entries
+- whyItMatters: 4-7 entries
+- watchlist: 4-7 entries`
+    : `This is a daily digest (1 day). Use a concise size:
+- overview: 3-5 short sentences
+- themes: 3-5 entries
+- highlights: 5-8 entries
+- whyItMatters: 2-4 entries
+- watchlist: 2-4 entries`;
+
+  const prompt = `Create a professional, readable digest for a curated news feed.
+
+Section: "${args.section}"
+This section covers: ${sectionDesc}
 Window: last ${args.days} day(s)
 Filters: country=${args.country || "any"}, category=${args.topic || "any"}
-Items on page: ${itemCount}
+Total items: ${itemCount}
 
 Output language: ${targetLang}
 
@@ -129,24 +156,13 @@ Rules:
 - Use only the provided items; do not invent stories.
 - Plain text in JSON values. No markdown, no asterisks, no bullet prefixes.
 - Each array entry must be a single sentence or short phrase.
+- Prioritize items that are genuinely relevant to the "${args.section}" section.
+- If an item is clearly off-topic for this section, exclude it from highlights.
 
-Dynamic sizing:
-- If itemCount < 8, keep highlights <= 6 and themes <= 4.
-- If itemCount is between 8 and 18, use normal ranges.
-- If itemCount > 18, cap highlights at 12.
-
-Normal ranges:
-- overview: 4-7 short sentences
-- themes: 4-7 entries
-- highlights: 8-14 entries
-- whyItMatters: 3-6 entries
-- watchlist: 3-6 entries
+${sizing}
 
 Items:
-${args.items
-  .slice(0, 25)
-  .map((i, idx) => `${idx + 1}. [${i.sourceName}] ${i.title} (${i.url})`)
-  .join("\n")}`;
+${itemsText}`;
 
   const schema = {
     type: "object",
@@ -169,14 +185,16 @@ ${args.items
     watchlist: (parsed?.watchlist || []).map(sanitizeSingleLine).filter(Boolean),
   });
 
+  const maxTokens = isWeekly ? 2500 : 1800;
+
   const out = await openaiGenerateText({
     model: OPENAI_MODELS.digest,
     prompt,
-    instructions: "Return only JSON that matches the requested schema.",
+    instructions: "Return only JSON that matches the requested schema. Focus on items most relevant to the section definition.",
     temperature: 0,
-    maxOutputTokens: 1800,
+    maxOutputTokens: maxTokens,
     jsonSchema: { name: "atlas_digest", schema },
-    timeoutMs: 35_000,
+    timeoutMs: 45_000,
     retries: 1,
   });
 
