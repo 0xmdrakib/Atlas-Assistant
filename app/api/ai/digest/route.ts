@@ -124,7 +124,6 @@ export async function POST(req: Request) {
     where,
     include: { source: true },
     orderBy: [{ createdAt: "desc" }, { score: "desc" }],
-    take: 50,
   });
 
   const key = digestCacheKey(section, kind, days, country, topic, lang);
@@ -200,6 +199,7 @@ export async function POST(req: Request) {
           title: it.title,
           sourceName: kind === "ai" ? aiProviderName(it.url) || it.source.name : it.source.name,
           url: it.url,
+          summary: it.summary,
         })),
       });
     } catch (e: any) {
